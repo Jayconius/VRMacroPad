@@ -1,0 +1,101 @@
+{
+  "name": "vr-macro-pad",
+  "productName": "VR Macro Pad",
+  "version": "1.0.0",
+  "description": "Colored push-button macros you can pin in VR (via OVR Toolkit, XSOverlay, Desktop+) or use on the desktop.",
+  "main": "src/main/main.js",
+  "scripts": {
+    "start": "electron .",
+    "dev": "node src/core/dev.js",
+    "build:helper": "node scripts/build-helper.js",
+    "smoke": "node scripts/smoke.js",
+    "test:single": "node scripts/single-instance-test.js",
+    "test:clean": "node scripts/clean-view-test.js",
+    "test": "node --test --test-timeout=60000 \"test/*.test.js\"",
+    "make:icon": "node scripts/make-icon.js",
+    "dist": "node scripts/make-icon.js && electron-builder --win portable nsis --x64",
+    "dist:dir": "node scripts/make-icon.js && electron-builder --win dir --x64"
+  },
+  "dependencies": {
+    "ws": "^8.18.0"
+  },
+  "devDependencies": {
+    "electron": "^33.0.0",
+    "electron-builder": "^26.15.3"
+  },
+  "author": "Jayconius",
+  "build": {
+    "appId": "com.jayconius.vrmacropad",
+    "productName": "VR Macro Pad",
+    "copyright": "Copyright (c) 2026 Jayconius",
+    "directories": {
+      "output": "dist",
+      "buildResources": "build"
+    },
+    "files": [
+      "src/**/*",
+      "vendor/**/*",
+      "scripts/build-helper.js",
+      "package.json",
+      "!**/*.md",
+      "!src/core/dev.js"
+    ],
+    "asar": true,
+    "win": {
+      "icon": "build/icon.png",
+      "target": [
+        {
+          "target": "portable",
+          "arch": [
+            "x64"
+          ]
+        },
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ]
+    },
+    "portable": {
+      "artifactName": "VR-Macro-Pad-${version}-portable.exe"
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "VR Macro Pad",
+      "artifactName": "VR-Macro-Pad-Setup-${version}.exe"
+    },
+    "electronLanguages": [
+      "en-US"
+    ],
+    "compression": "maximum"
+  },
+  "license": "MIT",
+  "homepage": "https://github.com/Jayconius/VRMacroPad#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Jayconius/VRMacroPad.git"
+  },
+  "bugs": {
+    "url": "https://github.com/Jayconius/VRMacroPad/issues"
+  },
+  "keywords": [
+    "vr",
+    "steamvr",
+    "macro",
+    "macro-deck",
+    "overlay",
+    "twitch",
+    "obs",
+    "vrchat",
+    "spotify",
+    "electron",
+    "windows"
+  ],
+  "private": true
+}

@@ -1,0 +1,225 @@
+// Entry point: top bar, lock button, and wiring between the core's pushed events and the views.
+import { h, clear } from './util.js';
+import * as net from './net.js';
+import { state, notify, subscribe, currentPage } from './state.js';
+import { toast, anyModalOpen } from './modal.js';
+import { createGridView } from './grid-view.js';
+import { startNewButton, editButton } from './editor.js';
+import { openSettings, openPageDialog, openInfo } from './dialogs.js';
+import { setActivePage, lockEditing, unlockEditing, touchEdit } from './commands.js';
+
+const root = document.getElementById('app');
+const topbar = h('header', { class: 'topbar' });
+const stage = h('main', { class: 'stage' });
+const banner = h('div', { class: 'edit-banner', hidden: true });
+root.append(topbar, banner, stage);
+
+// The see-through window has no native edges, so eight thin strips around it do the resizing.
+const edges = h('div', { class: 'clean-edges', hidden: true }, ['n', 's', 'e', 'w', 'ne', 'nw', 'se', 'sw'].map((edge) => {
+  const el = h('div', { class: `clean-edge ${edge}` });
+  el.addEventListener('pointerdown', (e) => {
+    if (e.button !== 0) return;
+    e.preventDefault();
+    el.setPointerCapture(e.pointerId);
+    const start = { sx: e.screenX, sy: e.screenY, x: window.screenX, y: window.screenY, w: window.outerWidth, h: window.outerHeight };
+    let queued = null;
+    let sending = false;
+    const flush = () => {
+      if (sending || !queued) return;
+      const b = queued;
+      queued = null;
+      sending = true;
+      net.request('window.bounds', b).catch(() => {}).finally(() => { sending = false; flush(); });
+    };
+    const move = (ev) => {
+      const dx = ev.screenX - start.sx;
+      const dy = ev.screenY - start.sy;
+      const b = { x: start.x, y: start.y, width: start.w, height: start.h };
+      if (edge.includes('e')) b.width = start.w + dx;
+      if (edge.includes('s')) b.height = start.h + dy;
+      if (edge.includes('w')) { b.width = start.w - dx; b.x = start.x + dx; }
+      if (edge.includes('n')) { b.height = start.h - dy; b.y = start.y + dy; }
+      queued = b;
+      flush();
+    };
+    const done = () => { el.removeEventListener('pointermove', move); el.removeEventListener('pointerup', done); el.removeEventListener('pointercancel', done); };
+    el.addEventListener('pointermove', move);
+    el.addEventListener('pointerup', done);
+    el.addEventListener('pointercancel', done);
+  });
+  return el;
+}));
+document.body.append(edges);
+
+const grid = createGridView(stage, {
+  onEdit: (id) => editButton(id),
+  onAddAt: (x, y) => startNewButton({ x, y }),
+});
+
+// ---- lock button ----
+function lockButton() {
+  const { on, unlockMethod } = state.edit;
+  if (on) {
+    return h('button', { class: 'lock-btn unlocked', title: 'Lock editing', onclick: () => lockEditing() }, '🔓', h('span', null, 'Lock'));
+  }
+  if (unlockMethod === 'hotkey') {
+    return h('button', { class: 'lock-btn locked disabled', title: `Editing is unlocked with ${state.config.settings.lock.unlockHotkey} or the tray icon` }, '🔒', h('span', null, 'Locked'));
+  }
+  const holdMs = state.config.settings.lock.holdMs;
+  const fill = h('div', { class: 'lock-fill', style: { '--hold-ms': `${holdMs}ms` } });
+  const btn = h('button', { class: 'lock-btn locked', title: 'Hold to unlock editing' }, fill, '🔒', h('span', null, 'Hold to edit'));
+  let timer = null;
+  const cancel = () => { clearTimeout(timer); timer = null; btn.classList.remove('holding'); };
+  btn.addEventListener('pointerdown', (e) => {
+    if (e.button !== 0) return;
+    btn.classList.add('holding');
+    timer = setTimeout(() => { cancel(); unlockEditing().catch(() => {}); }, holdMs);
+  });
+  for (const ev of ['pointerup', 'pointerleave', 'pointercancel']) btn.addEventListener(ev, cancel);
+  return btn;
+}
+
+// The window has no title bar of its own, so it needs its own minimize / maximize / close.
+function windowControls() {
+  if (!state.app.hasHost || !state.config.settings.window.frameless || state.config.settings.window.cleanView) return null;
+  const ctl = (label, title, cmd, cls = '') => h('button', { class: `win-ctl ${cls}`, title, onclick: () => net.request('window.control', { cmd }).catch(() => {}) }, label);
+  return h('div', { class: 'win-controls' }, ctl('–', 'Minimize', 'minimize'), ctl('▢', 'Maximize / restore', 'maximize'), ctl('✕', 'Close', 'close', 'close'));
+}
+
+function statusDots() {
+  const st = state.status;
+  const dots = [];
+  const add = (label, s) => { if (s && s !== 'off') dots.push(h('span', { class: `chip ${s}`, title: `${label}: ${s}` }, h('span', { class: `dot ${s}` }), label)); };
+  add('OBS', st.obs);
+  add('VRChat', st.vrc);
+  if (st.helper === 'error') add('Helper', 'error');
+  return dots;
+}
+
+// Rebuilding the bar while a finger/laser is down on it would swallow the click or
+// cancel a press-and-hold, so only rebuild when something it shows has changed.
+let topbarSignature = '';
+
+function renderTopbar() {
+  const st = state.status;
+  const signature = JSON.stringify([
+    state.config.pages.map((p) => [p.id, p.name]), state.activePage, state.edit.on, state.edit.unlockMethod,
+    state.config.settings.lock, st.obs, st.vrc, st.helper, state.config.settings.window.frameless, state.config.settings.window.cleanView, state.app.hasHost,
+  ]);
+  if (signature === topbarSignature) return;
+  topbarSignature = signature;
+  clear(topbar);
+  const editing = state.edit.on;
+  const clean = state.app.hasHost && state.config.settings.window.cleanView;
+  const tabs = h('nav', { class: 'page-tabs' }, state.config.pages.map((p) => {
+    const active = p.id === (currentPage() || {}).id;
+    return h('button', { class: `page-tab${active ? ' on' : ''}`, onclick: () => (editing && active ? openPageDialog(p.id) : setActivePage(p.id)), title: editing && active ? 'Page settings' : undefined },
+      p.name, editing && active ? h('span', { class: 'gear' }, '⚙') : null);
+  }));
+  if (clean) {
+    // Buttons only: the pages, and one faint button to bring everything back.
+    topbar.append(tabs, h('span', { class: 'spacer' }),
+      h('button', { class: 'clean-exit', title: 'Show the full window again', onclick: () => net.request('view.clean', { on: false }).catch(() => {}) }, '⋯'));
+    return;
+  }
+  // Native append() would print the word "null", so drop the empty slots first.
+  topbar.append(...[
+    tabs,
+    editing ? h('button', { class: 'btn-secondary small', title: 'Add a page', onclick: () => openPageDialog(null, { isNew: true }) }, '＋ Page') : null,
+    h('span', { class: 'spacer' }),
+    h('div', { class: 'chips' }, statusDots()),
+    editing ? h('button', { class: 'btn-primary', onclick: () => startNewButton(null) }, '＋ Add button') : null,
+    editing ? h('button', { class: 'icon-btn', title: 'Settings', onclick: openSettings }, '⚙️') : null,
+    h('button', { class: 'icon-btn', title: 'Status, activity and VR help', onclick: openInfo }, 'ⓘ'),
+    state.app.hasHost ? h('button', { class: 'icon-btn', title: 'Buttons only: hide everything except the pages and buttons (see-through window)', onclick: () => net.request('view.clean', { on: true }).catch(() => {}) }, '👁') : null,
+    lockButton(),
+    windowControls(),
+  ].filter(Boolean));
+}
+
+function renderBanner() {
+  const on = state.edit.on;
+  banner.hidden = !on;
+  if (!on) return;
+  const left = state.edit.relockAt ? Math.max(0, Math.round((state.edit.relockAt - Date.now()) / 1000)) : 0;
+  banner.textContent = `EDITING — drag buttons to move, drag the corner to resize, click one to edit it${left ? `. Locks again in ${left}s` : ''}`;
+}
+
+let cleanExitRequested = false;
+
+function applyTheme() {
+  const s = state.config.settings;
+  const clean = Boolean(state.app.hasHost && s.window.cleanView);
+  document.body.classList.toggle('frameless', Boolean(state.app.hasHost && (s.window.frameless || s.window.cleanView)));
+  document.body.classList.toggle('clean', clean);
+  document.documentElement.classList.toggle('clean', clean);
+  edges.hidden = !clean;
+  // Unlocking editing (tray or hotkey) needs the normal window: its dialogs and the Add button live there.
+  if (clean && state.edit.on && !cleanExitRequested) { cleanExitRequested = true; net.request('view.clean', { on: false }).catch(() => {}); }
+  if (!clean) cleanExitRequested = false;
+  document.documentElement.dataset.theme = s.theme;
+  document.documentElement.style.setProperty('--accent', s.accent);
+}
+
+function render() {
+  if (!state.ready) return;
+  applyTheme();
+  renderTopbar();
+  renderBanner();
+  grid.render();
+}
+
+subscribe(render);
+setInterval(renderBanner, 1000);
+
+// Keep the automatic re-lock from firing in the middle of an edit: any activity, or just
+// having a dialog open, counts as "still editing" (commands.touchEdit throttles the traffic).
+for (const ev of ['pointerdown', 'keydown']) document.addEventListener(ev, () => touchEdit(), true);
+setInterval(() => { if (anyModalOpen()) touchEdit(); }, 15000);
+
+// ---- connection + pushed events ----
+const overlay = h('div', { class: 'conn-overlay', hidden: true });
+document.body.append(overlay);
+
+net.on('conn', (c) => {
+  overlay.hidden = c.connected;
+  clear(overlay);
+  if (c.connected) return;
+  overlay.append(c.error === 'missing-token'
+    ? h('div', null, h('h2', null, 'Open this from the VR Macro Pad app'), h('p', { class: 'muted' }, 'This page needs the secret link the app prints (or its tray menu → “Copy browser link”).'))
+    : h('div', null, h('h2', null, 'Reconnecting…'), h('p', { class: 'muted' }, 'Is VR Macro Pad still running?')));
+});
+
+// Timers count against the core's clock, so remember how far this page's clock is from it.
+function syncClock(data) {
+  for (const d of Object.values(data || {})) {
+    if (d && typeof d.now === 'number') { state.clockOffset = d.now - Date.now(); return; }
+  }
+}
+
+net.on('init', (m) => {
+  Object.assign(state, {
+    ready: true, config: m.config, catalog: m.catalog, buttonStates: m.buttonStates, widgetData: m.widgetData || {}, activePage: m.activePage,
+    edit: m.edit, status: m.status, log: m.log, app: m.app,
+  });
+  syncClock(state.widgetData);
+  notify();
+});
+net.on('widgetData', (m) => { state.widgetData = m.data; syncClock(m.data); notify(); });
+net.on('config', (m) => { state.config = m.config; notify(); });
+net.on('buttonStates', (m) => { state.buttonStates = m.states; notify(); });
+net.on('page', (m) => { state.activePage = m.id; notify(); });
+net.on('edit', (m) => { state.edit = m.edit; notify(); });
+net.on('status', (m) => { state.status = m.status; notify(); });
+net.on('running', (m) => { if (m.on) state.running.add(m.id); else state.running.delete(m.id); notify(); });
+net.on('pressResult', (m) => grid.flash(m.id, m.ok));
+net.on('toast', (m) => {
+  state.log.push(m.entry);
+  if (state.log.length > 200) state.log.shift();
+  toast(m.entry.text, m.entry.level);
+});
+
+net.connect();
+
+// Test hook for automated UI checks.
+window.__vrmd = { state };

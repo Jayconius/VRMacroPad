@@ -1,0 +1,380 @@
+// Runs buttons, tracks their state, fires triggers and owns the edit lock.
+const { EventEmitter } = require('events');
+const { normalizeConfig } = require('./schema');
+const { defs, autoStateKey } = require('./actions');
+const { WidgetRuntime, registry: widgetDefs } = require('./widgets');
+const { emptyNeeds } = require('./providers');
+
+const LOG_LIMIT = 200;
+
+// Adds one provider-needs description ({ vr: true, media: ['spotify'] ... }) into the running total.
+function mergeNeeds(total, add) {
+  for (const [k, v] of Object.entries(add || {})) {
+    if (v instanceof Set || Array.isArray(v)) for (const x of v) total[k].add(x);
+    else if (v) total[k] = true;
+  }
+}
+
+class Engine extends EventEmitter {
+  constructor({ store, helper, providers, hub, hooks, now, random }) {
+    super();
+    this.store = store;
+    this.helper = helper;
+    this.providers = providers;
+    this.hub = hub;
+    this.hooks = hooks;
+    this.widgets = new WidgetRuntime({
+      store, now, random,
+      extras: {
+        vr: () => providers.vrSnapshot(),
+        media: (app) => providers.mediaData(app),
+        mediaControl: (app, cmd, pos) => providers.mediaControl(app, cmd, pos),
+        twitchAds: () => providers.twitchAdsData(),
+        twitchStream: () => providers.twitchStreamData(),
+        twitchApi: (fn) => providers.twitchCall(fn),
+        refreshTwitch: () => providers.refreshTwitch(),
+        // A result is still shown on the button when it cannot be posted, so this only warns.
+        postChat: async (text) => {
+          try { await providers.twitchCall((t) => t.sendChat(text)); } catch (err) { this.notify('warn', `Not posted to Twitch chat: ${err.message}`); }
+        },
+      },
+    });
+    this.widgets.on('change', () => this.emitWidgetData());
+    this.widgets.on('timerFinished', (button) => this.onTimerFinished(button));
+    this.lastWidgetData = '{}';
+    this.config = null;
+    this.activePageId = null;
+    this.running = new Set();
+    this.localToggle = new Map();
+    this.watchers = [];
+    this.timeTriggers = [];
+    this.lastTimeFired = '';
+    this.timeTimer = null;
+    this.editing = false;
+    this.relockAt = 0;
+    this.relockTimer = null;
+    this.lastStates = '{}';
+    this.log = [];
+    this.startWarnings = [];
+    this.hub.on('change', () => this.onHubChange());
+  }
+
+  // ---- startup / config ----
+  init() {
+    const loaded = this.store.load();
+    this.config = loaded.config;
+    this.startWarnings = loaded.warnings;
+    if (loaded.fresh) this.store.save(this.config);
+    const runtime = this.store.readRuntime();
+    this.activePageId = this.config.pages.some((p) => p.id === runtime.activePage) ? runtime.activePage : this.config.pages[0].id;
+    this.applyConfig();
+    this.timeTimer = setInterval(() => this.checkTimeTriggers(), 15000);
+    for (const w of loaded.warnings) this.notify('warn', w);
+  }
+
+  stop() {
+    clearInterval(this.timeTimer);
+    clearTimeout(this.relockTimer);
+    this.widgets.stop();
+  }
+
+  // Validate, persist and apply a full config from the UI.
+  updateConfig(input) {
+    const { config, warnings } = normalizeConfig(input);
+    // Window position/size belong to the desktop shell, not the UI: the UI's copy can be stale.
+    const { width, height, x, y } = this.config.settings.window;
+    Object.assign(config.settings.window, { width, height, x, y });
+    this.config = config;
+    if (!config.pages.some((p) => p.id === this.activePageId)) this.setActivePage(config.pages[0].id);
+    this.store.save(config);
+    this.applyConfig();
+    this.emit('config', config);
+    return warnings;
+  }
+
+  // For settings the app itself changes (window position, tray toggles) without the edit lock.
+  // broadcast=false is for high-frequency, UI-irrelevant changes such as the window position.
+  patchSettings(mutate, { broadcast = true } = {}) {
+    const copy = JSON.parse(JSON.stringify(this.config));
+    mutate(copy.settings);
+    const { config } = normalizeConfig(copy);
+    this.config = config;
+    this.store.save(config);
+    this.providers.configure(config.settings);
+    if (broadcast) this.emit('config', config);
+  }
+
+  applyConfig() {
+    this.providers.configure(this.config.settings);
+    this.widgets.sync(this.buttons().map((e) => e.button));
+    this.rebuildTriggers();
+    this.providers.sync(this.computeNeeds());
+    this.onHubChange(true);
+  }
+
+  buttons() {
+    const out = [];
+    for (const page of this.config.pages) for (const button of page.buttons) out.push({ page, button });
+    return out;
+  }
+
+  findButton(id) {
+    return this.buttons().find((e) => e.button.id === id) || null;
+  }
+
+  stateKeyOf(button) {
+    if (button.widget) return null; // widgets draw their own state
+    const s = button.state;
+    if (s.source === 'none') return null;
+    if (s.source === 'toggle') return `local:${button.id}`;
+    if (s.source === 'key') return s.key || null;
+    return autoStateKey(button);
+  }
+
+  // Which providers must be running for the current config.
+  computeNeeds() {
+    const needs = emptyNeeds();
+    const note = (key) => {
+      if (!key) return;
+      if (key.startsWith('audio.')) needs.audio = true;
+      else if (key.startsWith('obs.')) needs.obs = true;
+      else if (key.startsWith('vrc.')) {
+        needs.vrc = true;
+        if (key.startsWith('vrc.param=')) needs.vrcParams.add(key.slice('vrc.param='.length));
+      } else if (key === 'proc' || key.startsWith('proc=')) needs.process = true;
+      else if (key.startsWith('vr.')) needs.vr = true;
+      else if (key.startsWith('media.')) needs.media.add('any');
+      else if (key.startsWith('pear.')) needs.pear = true;
+      else if (key.startsWith('spotify.')) {
+        needs.media.add('spotify');
+        if (key === 'spotify.liked' || key === 'spotify.connected') needs.spotify = true;
+      }
+      else if (key.startsWith('twitch.')) {
+        needs.twitch = true;
+        if (key === 'twitch.adSoon' || key === 'twitch.ads') needs.twitchAds = true;
+        else if (key === 'twitch.live' || key === 'twitch.stream') needs.twitchStream = true;
+        else if (key !== 'twitch.connected') needs.twitchModes = true;
+      }
+    };
+    for (const { button } of this.buttons()) {
+      if (button.widget) {
+        const wdef = widgetDefs.get(button.widget.type);
+        if (wdef && wdef.needs) mergeNeeds(needs, wdef.needs(button.widget.params || {}));
+        if (button.widget.params && button.widget.params.postToChat) needs.twitch = true;
+      }
+      for (const step of button.steps) {
+        const def = defs.get(step.action);
+        if (!def || !def.needs) continue;
+        mergeNeeds(needs, typeof def.needs === 'function' ? def.needs(step.params || {}) : { [def.needs]: true });
+      }
+      note(this.stateKeyOf(button));
+      for (const t of button.triggers) {
+        if (t.type === 'state') note(t.key);
+        if (t.type === 'processStart' || t.type === 'processStop') needs.process = true;
+      }
+    }
+    for (const page of this.config.pages) if (page.autoShowProcess) needs.process = true;
+    return needs;
+  }
+
+  // ---- triggers ----
+  rebuildTriggers() {
+    this.watchers = [];
+    this.timeTriggers = [];
+    const hotkeys = [];
+    for (const { button } of this.buttons()) {
+      for (const t of button.triggers) {
+        const fire = () => this.press(button.id, { source: 'trigger' });
+        if (t.type === 'hotkey' && t.accelerator) hotkeys.push({ accelerator: t.accelerator, buttonId: button.id });
+        else if (t.type === 'processStart' && t.process) this.watchers.push({ key: `proc=${t.process}`, becomes: true, fire, prev: undefined });
+        else if (t.type === 'processStop' && t.process) this.watchers.push({ key: `proc=${t.process}`, becomes: false, fire, prev: undefined });
+        else if (t.type === 'state' && t.key) this.watchers.push({ key: t.key, becomes: t.becomes, fire, prev: undefined });
+        else if (t.type === 'time') this.timeTriggers.push({ at: t.at, days: t.days, fire });
+      }
+    }
+    for (const page of this.config.pages) {
+      if (page.autoShowProcess) {
+        this.watchers.push({ key: `proc=${page.autoShowProcess}`, becomes: true, fire: () => this.setActivePage(page.id), prev: undefined });
+      }
+    }
+    for (const w of this.watchers) w.prev = this.hub.eval(w.key);
+    const failed = this.hooks.registerHotkeys(hotkeys) || [];
+    for (const accel of failed) this.notify('warn', `Hotkey ${accel} could not be registered (another app may be using it).`);
+  }
+
+  checkTimeTriggers() {
+    const now = new Date();
+    const hhmm = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+    const stamp = `${now.toDateString()} ${hhmm}`;
+    if (stamp === this.lastTimeFired) return;
+    let matched = false;
+    for (const t of this.timeTriggers) {
+      if (t.at === hhmm && t.days.includes(now.getDay())) { matched = true; t.fire(); }
+    }
+    if (matched) this.lastTimeFired = stamp;
+  }
+
+  onHubChange(force = false) {
+    for (const w of this.watchers) {
+      const v = this.hub.eval(w.key);
+      if (w.prev !== undefined && v !== undefined && v !== w.prev && v === w.becomes) w.fire();
+      w.prev = v;
+    }
+    const states = JSON.stringify(this.computeButtonStates());
+    if (force || states !== this.lastStates) {
+      this.lastStates = states;
+      this.emit('buttonStates', JSON.parse(states));
+    }
+    this.emitWidgetData(force);
+  }
+
+  // ---- widgets ----
+  // { buttonId: data } for every widget button. Each entry carries the server's clock ("now")
+  // so the UI can keep timers right even if its own clock is off.
+  computeWidgetData() {
+    const out = {};
+    for (const { button } of this.buttons()) if (button.widget) out[button.id] = this.widgets.data(button);
+    return out;
+  }
+
+  emitWidgetData(force = false) {
+    const data = this.computeWidgetData();
+    const sig = JSON.stringify(data, (k, v) => (k === 'now' ? undefined : v));
+    if (!force && sig === this.lastWidgetData) return;
+    this.lastWidgetData = sig;
+    this.emit('widgetData', data);
+  }
+
+  async widgetCommand(id, cmd, arg) {
+    const found = this.findButton(id);
+    if (!found || !found.button.widget) throw new Error('Unknown widget');
+    try {
+      await this.widgets.command(found.button, cmd, arg);
+      return { ok: true };
+    } catch (err) {
+      this.notify('error', `${found.button.label || found.button.widget.type}: ${err.message}`);
+      return { ok: false, error: err.message };
+    }
+  }
+
+  onTimerFinished(button) {
+    this.notify('info', `⏲️ ${button.label || 'Timer'} finished`);
+    if (button.steps.length) {
+      this.runSteps(button.steps).catch((err) => this.notify('error', `${button.label || 'Timer'}: ${err.message}`));
+    }
+    this.emitWidgetData();
+  }
+
+  // { buttonId: { active: bool, unknown: bool } } for every button that has a state source.
+  computeButtonStates() {
+    const out = {};
+    for (const { button } of this.buttons()) {
+      const key = this.stateKeyOf(button);
+      if (!key) continue;
+      const v = key.startsWith('local:') ? Boolean(this.localToggle.get(button.id)) : this.hub.eval(key);
+      out[button.id] = { active: v === true, unknown: v === undefined };
+    }
+    return out;
+  }
+
+  // ---- running buttons ----
+  async press(id, { source = 'ui' } = {}) {
+    const found = this.findButton(id);
+    if (!found) throw new Error('Unknown button');
+    const { button } = found;
+    // Hotkeys and triggers "press" a widget by tapping it (roll the dice, start the timer...).
+    if (button.widget) return this.widgetCommand(id, 'tap');
+    if (this.running.has(id)) return { skipped: true };
+    if (!button.steps.length) {
+      this.notify('info', `"${button.label || 'This button'}" has no actions yet. Unlock editing and add one.`);
+      return { ok: false };
+    }
+    this.running.add(id);
+    this.emit('running', { id, on: true });
+    try {
+      await this.runSteps(button.steps);
+      if (button.state.source === 'toggle') {
+        this.localToggle.set(id, !this.localToggle.get(id));
+        this.onHubChange(true);
+      }
+      this.emit('pressResult', { id, ok: true, source });
+      return { ok: true };
+    } catch (err) {
+      this.notify('error', `${button.label || 'Button'}: ${err.message}`);
+      this.emit('pressResult', { id, ok: false, source });
+      return { ok: false, error: err.message };
+    } finally {
+      this.running.delete(id);
+      this.emit('running', { id, on: false });
+    }
+  }
+
+  context() {
+    const { osc } = this.providers.settings;
+    return {
+      helper: this.helper,
+      obs: this.providers.obs,
+      hub: this.hub,
+      osc: { send: (address, args) => this.providers.osc.send(osc.host, osc.sendPort, address, args) },
+      vrc: { remember: (name, value) => this.providers.remember(name, value) },
+      toast: (text, level) => this.notify(level || 'info', text),
+      refreshAudio: () => this.providers.refreshAudio(),
+      twitchApi: (fn) => this.providers.twitchCall(fn),
+      pearApi: (fn) => this.providers.pearCall(fn),
+      spotifyLike: (mode) => this.providers.spotifyLike(mode),
+      refreshTwitch: () => this.providers.refreshTwitch(),
+      mediaControl: (app, cmd, pos) => this.providers.mediaControl(app, cmd, pos),
+    };
+  }
+
+  async runSteps(steps) {
+    const ctx = this.context();
+    for (const step of steps) {
+      if (step.delayMs) await new Promise((r) => setTimeout(r, step.delayMs));
+      const def = defs.get(step.action);
+      if (!def) throw new Error(`Unknown action "${step.action}"`);
+      await def.run(step.params || {}, ctx);
+    }
+  }
+
+  // ---- pages ----
+  setActivePage(id) {
+    if (!this.config.pages.some((p) => p.id === id) || id === this.activePageId) return;
+    this.activePageId = id;
+    this.store.writeRuntime({ activePage: id });
+    this.emit('page', id);
+  }
+
+  // ---- edit lock ----
+  // Locked is the default and the only state after a restart.
+  setEditing(on) {
+    clearTimeout(this.relockTimer);
+    this.editing = on;
+    this.relockAt = 0;
+    if (on) this.touchEdit(false);
+    this.emit('edit', this.editState());
+  }
+
+  touchEdit(emit = true) {
+    if (!this.editing) return;
+    clearTimeout(this.relockTimer);
+    const sec = this.config.settings.lock.autoRelockSec;
+    this.relockAt = sec ? Date.now() + sec * 1000 : 0;
+    if (sec) this.relockTimer = setTimeout(() => this.setEditing(false), sec * 1000);
+    if (emit) this.emit('edit', this.editState());
+  }
+
+  editState() {
+    return { on: this.editing, relockAt: this.relockAt, unlockMethod: this.config.settings.lock.unlockMethod };
+  }
+
+  // ---- notifications / log ----
+  notify(level, text) {
+    const entry = { t: Date.now(), level, text };
+    this.log.push(entry);
+    if (this.log.length > LOG_LIMIT) this.log.shift();
+    this.emit('toast', entry);
+  }
+}
+
+module.exports = { Engine };

@@ -1,0 +1,29 @@
+# dependencies and build output
+node_modules/
+dist/
+build/
+.helper-build/
+*.exe
+*.blockmap
+
+# local-only: test tools, dev data, editor / tool folders
+dev-tools/
+.devdata/
+.claude/
+.vscode/
+.idea/
+
+# your own data, in case a data folder ever ends up next to the code
+secrets.json
+auth.json
+runtime.json
+.env
+
+# logs, caches, OS files
+*.log
+*.tmp
+__pycache__/
+*.pyc
+coverage/
+Thumbs.db
+.DS_Store
