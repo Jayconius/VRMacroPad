@@ -3,6 +3,7 @@ const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
 const { Store } = require('./store');
+const { ImageStore } = require('./images');
 const { SecretStore } = require('./secrets');
 const { Helper, defaultBuildDir } = require('./helper');
 const { StateHub } = require('./state');
@@ -36,26 +37,28 @@ function loadToken(dataDir) {
 // Overrides (helper, mediaHelper, vrHelper, twitch, now, random) exist for tests.
 function createApp({
   dataDir, buildDir = defaultBuildDir(), hooks = {}, port, devMode = false,
-  helper: helperOverride, mediaHelper, vrHelper, twitch: twitchOverride, twitchOptions, pear: pearOverride, pearOptions, spotify: spotifyOverride, spotifyOptions, now, random,
+  helper: helperOverride, mediaHelper, vrHelper, vmHelper, twitch: twitchOverride, twitchOptions, pear: pearOverride, pearOptions, spotify: spotifyOverride, spotifyOptions, now, random,
 }) {
   fs.mkdirSync(dataDir, { recursive: true });
   const fullHooks = {
-    registerHotkeys: () => [], setFocusable: () => {}, windowControl: () => {}, setWindowBounds: () => {}, openExternal: () => false, isDesktop: false, ...hooks,
+    registerHotkeys: () => [], setFocusable: () => {}, windowControl: () => {}, setWindowBounds: () => {}, overlayCommand: async (name, args) => false, overlayInfo: null, openExternal: () => false, isDesktop: false, ...hooks,
   };
   const store = new Store(dataDir);
+  const images = new ImageStore(dataDir);
   const secrets = new SecretStore(dataDir, fullHooks.secretBox);
   const helper = helperOverride || new Helper(buildDir);
   const media = mediaHelper || new Helper(buildDir, 'media');
   const vr = vrHelper || new Helper(buildDir, 'vr');
+  const vm = vmHelper || new Helper(buildDir, 'voicemeeter');
   const twitch = twitchOverride || new TwitchClient({ secrets, ...(twitchOptions || {}) });
   const pear = pearOverride || new PearClient({ secrets, ...(pearOptions || {}) });
   const spotify = spotifyOverride || new SpotifyClient({ secrets, ...(spotifyOptions || {}) });
   const hub = new StateHub();
-  const providers = new Providers({ helper, media, vr, twitch, pear, spotify, hub, now, dataDir, store });
+  const providers = new Providers({ helper, media, vr, vm, twitch, pear, spotify, hub, now, dataDir, store });
   const engine = new Engine({ store, helper, providers, hub, hooks: fullHooks, now, random });
   const token = loadToken(dataDir);
   const server = createServer({
-    engine, providers, helper, store, hooks: fullHooks, token,
+    engine, providers, helper, store, images, hooks: fullHooks, token,
     uiDir: path.join(__dirname, '..', 'ui'),
     sharedDir: path.join(__dirname, '..', 'shared'),
     version: pkg.version,
@@ -63,10 +66,11 @@ function createApp({
   });
 
   return {
-    store, secrets, helper, media, vr, twitch, pear, spotify, hub, providers, engine, server, token,
+    store, images, secrets, helper, media, vr, vm, twitch, pear, spotify, hub, providers, engine, server, token,
     async start() {
       helper.start();
       engine.init();
+      images.gc(engine.config); // pictures no button uses any more
       const actual = await server.listen(port !== undefined ? port : engine.config.settings.server.port);
       return { port: actual, url: `http://127.0.0.1:${actual}/?token=${token}` };
     },
@@ -79,6 +83,7 @@ function createApp({
       helper.stop();
       media.stop();
       vr.stop();
+      vm.stop();
       server.close();
     },
   };

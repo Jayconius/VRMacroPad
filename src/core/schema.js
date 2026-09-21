@@ -2,6 +2,9 @@
 // normalizeConfig(), so a buggy or hostile client cannot store a malformed config.
 const crypto = require('crypto');
 const Grid = require('../shared/grid');
+const { defaultOverlay, normalizeOverlay } = require('./overlay-logic');
+const Effects = require('../shared/effects');
+const { NAME: IMAGE_NAME } = require('./images');
 
 const CONFIG_VERSION = 1;
 const LIMITS = { pages: 30, buttons: 200, steps: 30, triggers: 10, maxDelayMs: 600000 };
@@ -40,9 +43,10 @@ function defaultSettings() {
   return {
     theme: 'dark',
     accent: '#4c8dff',
+    animations: true, // button effects (pulse, flash...)
     gap: 10,
     lock: { unlockMethod: 'hold', holdMs: 1200, autoRelockSec: 180, unlockHotkey: 'Ctrl+Alt+Shift+E' },
-    window: { alwaysOnTop: false, nonActivating: true, frameless: true, cleanView: false, cleanViewHotkey: 'Ctrl+Alt+Shift+V', showInTaskbar: true, closeToTray: false, width: 960, height: 640, x: null, y: null },
+    window: { alwaysOnTop: false, nonActivating: true, frameless: true, cleanView: false, cleanViewHotkey: 'Ctrl+Alt+Shift+V', showInTaskbar: true, closeToTray: false, startHidden: false, width: 960, height: 640, x: null, y: null },
     obs: { host: '127.0.0.1', port: 4455, password: '' },
     osc: { host: '127.0.0.1', sendPort: 9000, listenPort: 9001, listen: true },
     twitch: { clientId: '', adWarnMinutes: 5 },
@@ -50,6 +54,7 @@ function defaultSettings() {
     vr: { lowBatteryPercent: 15 },
     pear: { host: '127.0.0.1', port: 26538 },
     server: { port: 17420 },
+    overlay: defaultOverlay(),
   };
 }
 
@@ -69,6 +74,7 @@ function mergeSettings(input) {
   return {
     theme: oneOf(s.theme, ['dark', 'light'], d.theme),
     accent: color(s.accent, d.accent),
+    animations: bool(s.animations, d.animations),
     gap: num(s.gap, 0, 40, d.gap),
     lock: {
       unlockMethod: oneOf(lock.unlockMethod, ['hold', 'hotkey'], d.lock.unlockMethod),
@@ -84,6 +90,7 @@ function mergeSettings(input) {
       cleanViewHotkey: str(win.cleanViewHotkey, 40, d.window.cleanViewHotkey).trim(),
       showInTaskbar: bool(win.showInTaskbar, d.window.showInTaskbar),
       closeToTray: bool(win.closeToTray, d.window.closeToTray),
+      startHidden: bool(win.startHidden, d.window.startHidden),
       width: num(win.width, 320, 7680, d.window.width),
       height: num(win.height, 240, 4320, d.window.height),
       x: coord(win.x),
@@ -109,6 +116,7 @@ function mergeSettings(input) {
     // Only a plain host name or address: this ends up inside a URL.
     pear: { host: /^[A-Za-z0-9.-]{1,100}$/.test(pear.host || '') ? pear.host : d.pear.host, port: num(pear.port, 1, 65535, d.pear.port) },
     server: { port: num(server.port, 1024, 65535, d.server.port) },
+    overlay: normalizeOverlay(s.overlay),
   };
 }
 
@@ -154,6 +162,12 @@ function normalizeButton(b, used) {
     icon: str(b.icon, 12),
     color: color(b.color, '#3b4a63'),
     colorOn: color(b.colorOn, ''),
+    image: typeof b.image === 'string' && IMAGE_NAME.test(b.image) ? b.image : '',
+    imageOn: typeof b.imageOn === 'string' && IMAGE_NAME.test(b.imageOn) ? b.imageOn : '',
+    imageFit: oneOf(b.imageFit, ['cover', 'contain'], 'cover'),
+    anim: Effects.isEffect(b.anim) ? b.anim : 'none',
+    animOn: Effects.isEffect(b.animOn) ? b.animOn : 'none',
+    animSpeed: Effects.isSpeed(b.animSpeed) ? b.animSpeed : 'normal',
     widget: normalizeWidget(b.widget),
     steps: (Array.isArray(b.steps) ? b.steps : []).slice(0, LIMITS.steps).map(normalizeStep).filter(Boolean),
     triggers: (Array.isArray(b.triggers) ? b.triggers : []).slice(0, LIMITS.triggers).map(normalizeTrigger).filter(Boolean),

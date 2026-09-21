@@ -491,9 +491,9 @@ namespace VrmdHelper
                 case "keys.text": Keyboard.Text(S(r, "text") ?? "", I(r, "delayMs", 0)); return true;
                 case "audio.devices": return Audio.Devices(S(r, "flow"));
                 case "audio.snapshot": return Audio.Snapshot();
-                case "audio.setMute": return Audio.SetMute(S(r, "flow"), S(r, "id"), O(r, "muted"));
-                case "audio.setVolume": return Audio.SetVolume(S(r, "flow"), S(r, "id"), O(r, "volume"), O(r, "delta"));
-                case "audio.setDefault": return Audio.SetDefault(S(r, "flow"), S(r, "id"));
+                case "audio.setMute": return Audio.SetMute(S(r, "flow"), S(r, "device"), O(r, "muted"));
+                case "audio.setVolume": return Audio.SetVolume(S(r, "flow"), S(r, "device"), O(r, "volume"), O(r, "delta"));
+                case "audio.setDefault": return Audio.SetDefault(S(r, "flow"), S(r, "device"));
                 case "audio.sessions": return Audio.Sessions();
                 case "audio.setSession":
                     return Audio.SetSession(S(r, "process"), O(r, "volume"), O(r, "delta"), O(r, "muted"), Convert.ToBoolean(O(r, "toggleMute") ?? false));

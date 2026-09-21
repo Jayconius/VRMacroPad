@@ -6,8 +6,10 @@ import { saveConfig } from './commands.js';
 import * as net from './net.js';
 import { buildParamForm, field, textInput, selectInput, checkbox, hotkeyField, optionsField } from './forms.js';
 import { INTERACTION } from './widgets-ui.js';
+import { applyLook, imageUrl } from './button-look.js';
 
 const Grid = window.Grid;
+const Effects = window.Effects;
 
 const EMOJIS = ['🎙️', '🎤', '🔇', '🔈', '🔉', '🔊', '🎧', '🎚️', '🎛️', '📻', '🎬', '📹', '🎥', '⏺️', '⏹️', '⏯️', '⏭️', '⏮️', '📡', '📎',
   '📷', '🖥️', '🔀', '⌨️', '🖱️', '🎮', '🕹️', '🥽', '🌐', '🔗', '🚀', '🔄', '🔁', '🔒', '🔓', '⚙️', '🛠️', '💬', '📢', '🔔',
@@ -123,6 +125,7 @@ export function startNewButton(at) {
         id: uid('b'), x: spot.x, y: spot.y, ...size,
         label: isWidget ? '' : d.label || (def ? def.label : 'Button'), labelOn: d.labelOn || '', icon: isWidget ? '' : d.icon || (def ? def.icon : ''),
         color: d.color || '#3b4a63', colorOn: d.colorOn || '',
+        image: '', imageOn: '', imageFit: 'cover', anim: 'none', animOn: 'none', animSpeed: 'normal',
         widget: isWidget ? { type: def.id, params: defaultParams(def) } : null,
         steps: def && !isWidget ? [{ action: def.id, params: defaultParams(def), delayMs: 0 }] : [],
         triggers: [], state: { source: isWidget ? 'none' : 'auto', key: '' }, confirm: d.confirm || 'none',
@@ -252,9 +255,46 @@ function openButtonEditor(draft, isNew) {
   // -- look tab --
   const previewBtn = (active) => {
     const bg = active ? (draft.colorOn || shade(draft.color, 0.28)) : draft.color;
-    return h('div', { class: `btn preview${active ? ' active' : ''}`, style: { '--bg': bg, '--fg': contrastText(bg), '--icon-size': '34px', '--label-size': '14px' } },
+    const el = h('div', { class: `btn preview${active ? ' active' : ''}`, style: { '--bg': bg, '--fg': contrastText(bg), '--icon-size': '34px', '--label-size': '14px' } },
       draft.icon ? h('div', { class: 'btn-icon' }, draft.icon) : null,
       h('div', { class: 'btn-label' }, (active && draft.labelOn) || draft.label || ''));
+    applyLook(el, draft, active);
+    return el;
+  };
+
+  // A picture (or animated GIF) for one state: choose a file, see it, take it away again.
+  const pictureField = (label, key, help) => {
+    const file = h('input', { type: 'file', accept: 'image/png,image/jpeg,image/gif,image/webp', hidden: true });
+    file.addEventListener('change', async () => {
+      const f = file.files && file.files[0];
+      file.value = '';
+      if (!f) return;
+      if (f.size > 8 * 1024 * 1024) { toast('That picture is over 8 MB. Pick a smaller one.', 'warn'); return; }
+      try {
+        const data = await new Promise((resolve, reject) => {
+          const r = new FileReader();
+          r.onload = () => resolve(String(r.result).split(',')[1] || '');
+          r.onerror = () => reject(new Error('Could not read that file'));
+          r.readAsDataURL(f);
+        });
+        draft[key] = await net.request('image.add', { data });
+        renderContent();
+      } catch (err) {
+        toast(err.message, 'error');
+      }
+    });
+    return field(label, h('div', { class: 'stack tight' },
+      h('div', { class: 'row gap' },
+        draft[key] ? h('img', { class: 'pic-thumb', src: imageUrl(draft[key]), alt: '' }) : h('span', { class: 'muted small' }, 'None'),
+        h('button', { type: 'button', class: 'btn-secondary small', onclick: () => file.click() }, draft[key] ? 'Change…' : 'Choose a picture…'),
+        draft[key] ? h('button', { type: 'button', class: 'btn-secondary small', onclick: () => { draft[key] = ''; renderContent(); } }, 'Remove') : null,
+        file)), help ? { help } : {});
+  };
+
+  const effectField = (label, key) => {
+    const sel = selectInput(Effects.EFFECTS.map((e) => [e.id, e.label]), draft[key] || 'none', (v) => { draft[key] = v; renderContent(); });
+    const cur = Effects.EFFECTS.find((e) => e.id === (draft[key] || 'none'));
+    return field(label, sel, cur && cur.help ? { help: cur.help } : {});
   };
 
   const colorField = (label, key, optional) => {
@@ -307,6 +347,12 @@ function openButtonEditor(draft, isNew) {
         field('Label when active', textInput(draft.labelOn, (v) => { draft.labelOn = v; updatePreview(); }, { placeholder: 'optional, e.g. Muted' }))),
       field('Icon', h('div', { class: 'stack tight' }, iconInput, picker)),
       h('div', { class: 'row gap top' }, colorField('Color', 'color', false), colorField('Color when active', 'colorOn', true)),
+      h('div', { class: 'row gap top' },
+        pictureField('Picture (PNG, JPEG, GIF, WebP)', 'image'),
+        pictureField('Picture when active', 'imageOn', 'Leave empty to keep the normal picture.')),
+      draft.image || draft.imageOn ? field('How the picture fits', selectInput([['cover', 'Fill the button (crops the edges)'], ['contain', 'Show the whole picture']], draft.imageFit, (v) => { draft.imageFit = v; updatePreview(); })) : null,
+      h('div', { class: 'row gap top' }, effectField('Animation when active', 'animOn'), effectField('Animation when not active', 'anim')),
+      draft.anim !== 'none' || draft.animOn !== 'none' ? field('Animation speed', selectInput(Effects.SPEEDS, draft.animSpeed, (v) => { draft.animSpeed = v; updatePreview(); })) : null,
       h('p', { class: 'muted small' }, 'Drag the corner handle on the grid to resize too. Or set the size here:'),
       gridSize,
       field('Color follows', stateSelect, { help: stateHelp }),

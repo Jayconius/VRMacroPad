@@ -84,13 +84,13 @@ test('actions: mic mute and keys reach the helper with the right arguments', asy
     btn('o', [{ action: 'audio.setDefaultOutput', params: { device: 'out-2' } }]),
   ]);
   const call = async (id) => { helper.calls.length = 0; await engine.press(id); return helper.calls.find((c) => c.op !== 'audio.snapshot'); };
-  assert.deepEqual(await call('t'), { op: 'audio.setMute', flow: 'capture', id: null, muted: null });
-  assert.deepEqual(await call('m'), { op: 'audio.setMute', flow: 'capture', id: 'dev-1', muted: true });
+  assert.deepEqual(await call('t'), { op: 'audio.setMute', flow: 'capture', device: null, muted: null });
+  assert.deepEqual(await call('m'), { op: 'audio.setMute', flow: 'capture', device: 'dev-1', muted: true });
   assert.deepEqual(await call('k'), { op: 'keys.combo', vks: [0x11, 0x10, 0x7c], holdMs: 50, scan: true });
   assert.deepEqual(await call('c'), { op: 'keys.combo', vks: [0x12, 0x09], holdMs: 30, scan: false });
-  assert.deepEqual(await call('v'), { op: 'audio.setVolume', flow: 'render', id: null, delta: -5 });
+  assert.deepEqual(await call('v'), { op: 'audio.setVolume', flow: 'render', device: null, delta: -5 });
   assert.deepEqual(await call('a'), { op: 'audio.setSession', process: 'discord', toggleMute: true });
-  assert.deepEqual(await call('o'), { op: 'audio.setDefault', flow: 'render', id: 'out-2' });
+  assert.deepEqual(await call('o'), { op: 'audio.setDefault', flow: 'render', device: 'out-2' });
   await app.stop();
 });
 

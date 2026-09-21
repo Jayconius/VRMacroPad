@@ -10,9 +10,23 @@ export const state = {
   edit: { on: false, relockAt: 0, unlockMethod: 'hold' },
   status: {},
   log: [],
-  app: { version: '', about: { author: '', website: '', github: '' }, devMode: false, platform: '', hasHost: false, twitchBuiltIn: false },
+  app: { version: '', overlayDefaults: {}, about: { author: '', website: '', github: '' }, devMode: false, platform: '', hasHost: false, twitchBuiltIn: false },
   running: new Set(),
 };
+
+// The SteamVR overlay shows this same page, loaded off-screen with ?view=overlay (see overlay-view.js).
+const viewName = typeof location !== 'undefined' ? new URLSearchParams(location.search).get('view') : '';
+// dashboard: the control panel opened from the bar at the bottom of SteamVR's menu (see dashboard-view.js).
+// editor: the full app, drawn inside the dashboard panel (see vr-input.js for what makes it usable with a laser).
+export const view = { overlay: viewName === 'overlay', dashboard: viewName === 'dashboard', editor: viewName === 'editor' };
+
+// The pages the overlay may show: the ones ticked in Settings, or all of them.
+export function overlayPages() {
+  const all = state.config ? state.config.pages : [];
+  const pick = (state.config && state.config.settings.overlay && state.config.settings.overlay.pages) || [];
+  const list = pick.length ? all.filter((p) => pick.includes(p.id)) : all;
+  return list.length ? list : all;
+}
 
 const subs = new Set();
 

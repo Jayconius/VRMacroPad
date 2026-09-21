@@ -4,6 +4,7 @@ import { h, clear, clamp, contrastText, shade } from './util.js';
 import { state, currentPage } from './state.js';
 import { press, saveConfig, touchEdit, widgetCommand } from './commands.js';
 import { createWidget, INTERACTION } from './widgets-ui.js';
+import { applyLook, preload } from './button-look.js';
 
 const Grid = window.Grid;
 const MIN_CELL = 40;
@@ -71,6 +72,7 @@ export function createGridView(container, { onEdit, onAddAt }) {
     const bg = active ? (b.colorOn || shade(b.color, 0.28)) : b.color;
     el.style.setProperty('--bg', bg);
     el.style.setProperty('--fg', contrastText(bg));
+    applyLook(el, b, active);
     const label = el.querySelector('.btn-label');
     if (label) label.textContent = isArmed ? 'Tap again to confirm' : (active && b.labelOn ? b.labelOn : b.label);
     const dot = el.querySelector('.offline-dot');
@@ -104,6 +106,8 @@ export function createGridView(container, { onEdit, onAddAt }) {
     h('div', { class: 'hold-fill' }),
     h('div', { class: 'offline-dot', title: 'Waiting for the app this button follows', hidden: true }),
     editing ? h('div', { class: 'handle', title: 'Drag to resize' }) : null);
+    preload(b.image);
+    preload(b.imageOn);
     applyDynamic(el, b);
     if (editing) wireEdit(el, b);
     else if (b.widget) wireWidget(el, b);

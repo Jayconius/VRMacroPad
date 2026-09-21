@@ -90,4 +90,207 @@ const actions = [
   },
 ];
 
+// ---- game controls (VRChat's OSC input controller) ----
+const CONTROLS = [
+  ['Jump', 'Jump'], ['Run', 'Run (hold)'], ['MoveForward', 'Move forward'], ['MoveBackward', 'Move backward'], ['MoveLeft', 'Move left'], ['MoveRight', 'Move right'],
+  ['LookLeft', 'Turn left'], ['LookRight', 'Turn right'], ['ComfortLeft', 'Comfort turn left (VR)'], ['ComfortRight', 'Comfort turn right (VR)'],
+  ['UseLeft', 'Use, left hand (VR)'], ['UseRight', 'Use, right hand (VR)'], ['GrabLeft', 'Grab, left hand (VR)'], ['GrabRight', 'Grab, right hand (VR)'],
+  ['DropLeft', 'Drop, left hand (VR)'], ['DropRight', 'Drop, right hand (VR)'],
+  ['QuickMenuToggleLeft', 'Quick Menu, left'], ['QuickMenuToggleRight', 'Quick Menu, right'], ['PanicButton', 'Panic button (hide everyone\'s avatars)'],
+];
+const AXES = [
+  ['Vertical', 'Walk forward (+) / backward (-)'], ['Horizontal', 'Walk right (+) / left (-)'], ['LookHorizontal', 'Turn right (+) / left (-)'],
+  ['UseAxisRight', 'Use, right hand (0 to 1)'], ['GrabAxisRight', 'Grab, right hand (0 to 1)'],
+  ['MoveHoldFB', 'Move a held object away (+) / toward you (-)'], ['SpinHoldCwCcw', 'Spin a held object clockwise (+)'], ['SpinHoldUD', 'Tilt a held object up / down'], ['SpinHoldLR', 'Tilt a held object left / right'],
+];
+const TAP_MS = 110;
+const MAX_HOLD_MS = 30000;
+const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+const iv = (value) => [{ type: 'i', value }];
+const fv = (value) => [{ type: 'f', value }];
+
+// The chatbox text with {time}, {date}, {song}, {artist} filled in.
+function fillTemplate(text, ctx, now = new Date()) {
+  const np = ctx.nowPlaying ? ctx.nowPlaying() : null;
+  const two = (n) => String(n).padStart(2, '0');
+  const map = {
+    time: `${two(now.getHours())}:${two(now.getMinutes())}`,
+    date: `${now.getFullYear()}-${two(now.getMonth() + 1)}-${two(now.getDate())}`,
+    song: np ? np.title || '' : '',
+    artist: np ? np.artist || '' : '',
+  };
+  return { text: String(text).replace(/\{(time|date|song|artist)\}/g, (m, k) => map[k]), playing: Boolean(np && np.title) };
+}
+
+actions.push(
+  {
+    id: 'vrc.input',
+    category: 'VRChat',
+    label: 'Press a game control',
+    description: 'Jump, run, walk, turn, use / grab / drop, open the Quick Menu, or hit the panic button, as if you pressed it on your controller. Needs OSC enabled in VRChat.',
+    icon: '🕹️',
+    needs: 'vrc',
+    params: [
+      { key: 'control', label: 'Control', type: 'select', options: CONTROLS, default: 'Jump' },
+      { key: 'how', label: 'How', type: 'select', options: [['tap', 'Tap'], ['hold', 'Hold for a time'], ['down', 'Press and keep held'], ['up', 'Let go']], default: 'tap' },
+      { key: 'ms', label: 'Hold time (ms)', type: 'number', min: 50, max: MAX_HOLD_MS, default: 1000, showIf: { key: 'how', in: ['hold'] } },
+    ],
+    defaults: { label: 'Jump', icon: '🕹️', color: '#2b6cb0' },
+    async run(p, ctx) {
+      if (!CONTROLS.some(([v]) => v === p.control)) throw new Error('Pick a control');
+      const address = `/input/${p.control}`;
+      // VRChat ignores a button that is not let go first (0), then pressed (1), then released again (0).
+      if (p.how === 'up') { await ctx.osc.send(address, iv(0)); return; }
+      await ctx.osc.send(address, iv(0));
+      await wait(30);
+      await ctx.osc.send(address, iv(1));
+      if (p.how === 'down') return;
+      await wait(p.how === 'hold' ? Math.min(MAX_HOLD_MS, Math.max(50, Number(p.ms) || 1000)) : TAP_MS);
+      await ctx.osc.send(address, iv(0));
+    },
+  },
+  {
+    id: 'vrc.axis',
+    category: 'VRChat',
+    label: 'Move or turn for a moment',
+    description: 'Walks, strafes or turns (or works a held object) for a set time, then stops. A time of 0 leaves it on until you send another one.',
+    icon: '🚶',
+    needs: 'vrc',
+    params: [
+      { key: 'axis', label: 'Movement', type: 'select', options: AXES, default: 'Vertical' },
+      { key: 'value', label: 'Strength (-1 to 1)', type: 'number', min: -1, max: 1, default: 1 },
+      { key: 'ms', label: 'For how long (ms, 0 = keep on)', type: 'number', min: 0, max: MAX_HOLD_MS, default: 500 },
+    ],
+    defaults: { label: 'Walk', icon: '🚶', color: '#2b6cb0' },
+    async run(p, ctx) {
+      if (!AXES.some(([v]) => v === p.axis)) throw new Error('Pick a movement');
+      const address = `/input/${p.axis}`;
+      const value = Math.max(-1, Math.min(1, Number(p.value)));
+      if (!Number.isFinite(value)) throw new Error('Strength is a number from -1 to 1');
+      await ctx.osc.send(address, fv(value));
+      const ms = Math.min(MAX_HOLD_MS, Math.max(0, Number(p.ms) || 0));
+      if (!ms) return;
+      await wait(ms);
+      await ctx.osc.send(address, fv(0));
+    },
+  },
+  {
+    id: 'vrc.chatboxLive',
+    category: 'VRChat',
+    label: 'Chatbox with the time or the song playing',
+    description: 'A chatbox message with {time}, {date}, {song} and {artist} filled in, for example "Listening to {song} - {artist}". Uses whatever your PC is playing.',
+    icon: '🎵',
+    needs: () => ({ vrc: true, media: ['any'] }),
+    params: [
+      { key: 'text', label: 'Message', type: 'text', required: true, default: 'Listening to {song} - {artist}', help: '{time} {date} {song} {artist}. VRChat shows at most 144 characters.' },
+      { key: 'onlyPlaying', label: 'Do nothing when no song is playing', type: 'boolean', default: true },
+      { key: 'sound', label: 'Play the notification sound', type: 'boolean', default: false },
+    ],
+    defaults: { label: 'Now playing', icon: '🎵', color: '#2b6cb0' },
+    async run(p, ctx) {
+      if (!p.text) throw new Error('No message to send');
+      const { text, playing } = fillTemplate(p.text, ctx);
+      if (/\{song\}|\{artist\}/.test(p.text) && p.onlyPlaying !== false && !playing) throw new Error('Nothing is playing right now');
+      const out = text.trim().slice(0, 144);
+      if (!out) throw new Error('The message came out empty');
+      await ctx.osc.send('/chatbox/input', [out, true, Boolean(p.sound)]);
+    },
+  },
+  {
+    id: 'vrc.chatboxClear',
+    category: 'VRChat',
+    label: 'Clear the chatbox',
+    description: 'Removes your message from the chatbox.',
+    icon: '🧹',
+    needs: 'vrc',
+    params: [],
+    defaults: { label: 'Clear chat', icon: '🧹', color: '#4a5568' },
+    async run(p, ctx) {
+      await ctx.osc.send('/chatbox/input', ['', true, false]);
+    },
+  },
+  {
+    id: 'vrc.typing',
+    category: 'VRChat',
+    label: 'Chatbox typing bubble',
+    description: 'Shows or hides the "typing..." bubble over your head.',
+    icon: '⌨️',
+    needs: 'vrc',
+    params: [{ key: 'on', label: 'Show the bubble', type: 'boolean', default: true }],
+    defaults: { label: 'Typing', icon: '⌨️', color: '#4a5568' },
+    async run(p, ctx) {
+      await ctx.osc.send('/chatbox/typing', [p.on !== false]);
+    },
+  },
+  {
+    id: 'vrc.paramStep',
+    category: 'VRChat',
+    label: 'Avatar parameter: step up / down / cycle',
+    description: 'Nudges an avatar slider (0 to 1) or steps a whole-number parameter (outfit number, mode) up, down or around.',
+    icon: '🎚️',
+    needs: (p) => ({ vrc: true, vrcParams: p.name ? [p.name] : [] }),
+    params: [
+      { key: 'name', label: 'Parameter name', type: 'text', required: true, placeholder: 'Outfit' },
+      { key: 'type', label: 'Type', type: 'select', options: [['float', 'Slider (decimal)'], ['int', 'Whole number']], default: 'int' },
+      { key: 'mode', label: 'Action', type: 'select', options: [['up', 'Up'], ['down', 'Down']], default: 'up' },
+      { key: 'step', label: 'Step', type: 'number', min: 0.001, max: 255, default: 1 },
+      { key: 'min', label: 'Lowest value', type: 'number', default: 0 },
+      { key: 'max', label: 'Highest value', type: 'number', default: 3 },
+      { key: 'wrap', label: 'Go around at the ends', type: 'boolean', default: true },
+    ],
+    defaults: { label: 'Next', icon: '🎚️', color: '#6b46c1' },
+    async run(p, ctx) {
+      if (!p.name) throw new Error('Enter the parameter name');
+      const int = p.type !== 'float';
+      const min = Number(p.min) || 0;
+      const max = Number.isFinite(Number(p.max)) ? Number(p.max) : (int ? 3 : 1);
+      if (max < min) throw new Error('The highest value must not be below the lowest');
+      const known = (ctx.hub.get('vrc.param') || {})[p.name];
+      const cur = Number.isFinite(Number(known)) ? Number(known) : min;
+      let next = cur + (p.mode === 'down' ? -1 : 1) * (Number(p.step) || 1);
+      if (next > max) next = p.wrap === false ? max : min;
+      else if (next < min) next = p.wrap === false ? min : max;
+      next = int ? Math.round(next) : Math.round(next * 1000) / 1000;
+      await ctx.osc.send(`/avatar/parameters/${p.name}`, [{ type: int ? 'i' : 'f', value: next }]);
+      ctx.vrc.remember(p.name, next);
+    },
+  },
+  {
+    id: 'osc.custom',
+    category: 'VRChat',
+    label: 'Send any OSC message',
+    description: 'Sends one OSC message to VRChat or to any other app that listens for OSC (face tracking, lighting, ...).',
+    icon: '📡',
+    params: [
+      { key: 'address', label: 'Address', type: 'text', required: true, placeholder: '/avatar/parameters/MyToggle' },
+      { key: 'type', label: 'Value type', type: 'select', options: [['bool', 'On / off'], ['int', 'Whole number'], ['float', 'Decimal number'], ['string', 'Text']], default: 'bool' },
+      { key: 'value', label: 'Value', type: 'text', default: '1', help: 'For on / off: 1 / true is on, 0 / false is off.' },
+      { key: 'host', label: 'Send to (empty = the VRChat address in Settings)', type: 'text', placeholder: '127.0.0.1' },
+      { key: 'port', label: 'Port (empty = the VRChat port in Settings)', type: 'number', min: 1, max: 65535 },
+    ],
+    defaults: { label: 'OSC', icon: '📡', color: '#4a5568' },
+    async run(p, ctx) {
+      const address = String(p.address || '').trim();
+      if (!address.startsWith('/') || /\s/.test(address)) throw new Error('The address starts with / and has no spaces');
+      let arg;
+      const raw = String(p.value === undefined ? '' : p.value).trim();
+      if (p.type === 'bool') arg = !/^(0|false|off|no|)$/i.test(raw);
+      else if (p.type === 'string') arg = raw;
+      else {
+        const n = Number(raw);
+        if (!Number.isFinite(n)) throw new Error('The value is not a number');
+        arg = { type: p.type === 'int' ? 'i' : 'f', value: n };
+      }
+      const port = Number(p.port);
+      if ((p.host && String(p.host).trim()) || port) {
+        if (!(port >= 1 && port <= 65535)) throw new Error('Enter the port to send to');
+        await ctx.oscTo(String(p.host || '127.0.0.1').trim(), Math.round(port), address, [arg]);
+      } else {
+        await ctx.osc.send(address, [arg]);
+      }
+    },
+  },
+);
+
 module.exports = actions;
+module.exports.fillTemplate = fillTemplate;

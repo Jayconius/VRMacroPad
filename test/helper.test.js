@@ -115,3 +115,32 @@ test('SteamVR helper: connects only if SteamVR is already running, and never sta
     await assert.rejects(vr.call('bogus'), /Unknown op/);
   } finally { vr.stop(); }
 });
+
+test('SteamVR helper: only a short fixed list of settings can be changed, and asking while SteamVR is off says so', { skip: !onWindows }, async () => {
+  const vr = new Helper(path.join(tempDir('vrmd-vr-'), 'build'), 'vr');
+  try {
+    await assert.rejects(vr.call('settings.set', { section: 'steamvr', key: 'installID', value: 1 }), /not one this app changes/);
+    await assert.rejects(vr.call('settings.set', { section: 'driver_lighthouse', key: 'anything', value: 1 }), /not one this app changes/);
+    await assert.rejects(vr.call('settings.set', { section: 'steamvr', key: 'supersampleScale' }), /No value|SteamVR/);
+    const st = await vr.call('settings.state');
+    assert.equal(typeof st.connected, 'boolean');
+    if (!st.connected) {
+      assert.match(st.error, /SteamVR/);
+      await assert.rejects(vr.call('recenter'), /SteamVR/);
+      await assert.rejects(vr.call('bounds.force', { on: true }), /SteamVR/);
+    } else {
+      assert.ok(st.values && typeof st.values === 'object');
+    }
+  } finally { vr.stop(); }
+});
+
+test('helper: a call that names a device is answered at once (the device is not mistaken for the request number)', { skip: !onWindows }, async () => {
+  // Before the fix these worked but never got an answer: the device id replaced the request id, so the button "timed out" after 8 s.
+  const t0 = Date.now();
+  await assert.rejects(helper.call('audio.setMute', { flow: 'capture', device: '{0.0.1.00000000}.{00000000-0000-0000-0000-000000000000}', muted: true }), /not found/i);
+  await assert.rejects(helper.call('audio.setDefault', { flow: 'render', device: '{bogus}' }), /not found/i);
+  await assert.rejects(helper.call('audio.setVolume', { flow: 'render', device: '{bogus}', volume: 5 }), /not found/i);
+  assert.ok(Date.now() - t0 < 3000, 'quick answers, not timeouts');
+  await assert.rejects(helper.call('audio.setMute', { flow: 'capture', id: null }), /cannot be named "id" or "op"/, 'the old spelling is refused loudly instead of silently timing out');
+  await assert.rejects(helper.call('audio.setMute', { flow: 'capture', op: 'x' }), /cannot be named/);
+});

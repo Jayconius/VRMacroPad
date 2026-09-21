@@ -21,7 +21,7 @@ const actions = [
     state: (p) => (p.device ? null : 'audio.in.muted'),
     defaults: { label: 'Mic', icon: '🎙️', color: '#2f855a', colorOn: '#c53030', labelOn: 'Muted' },
     async run(p, ctx) {
-      await ctx.helper.call('audio.setMute', { flow: 'capture', id: p.device || null, muted: muteArg(p.mode) });
+      await ctx.helper.call('audio.setMute', { flow: 'capture', device: p.device || null, muted: muteArg(p.mode) });
       ctx.refreshAudio();
     },
   },
@@ -39,7 +39,7 @@ const actions = [
     state: (p) => (p.device ? null : 'audio.out.muted'),
     defaults: { label: 'Sound', icon: '🔊', color: '#2b6cb0', colorOn: '#c53030', labelOn: 'Muted' },
     async run(p, ctx) {
-      await ctx.helper.call('audio.setMute', { flow: 'render', id: p.device || null, muted: muteArg(p.mode) });
+      await ctx.helper.call('audio.setMute', { flow: 'render', device: p.device || null, muted: muteArg(p.mode) });
       ctx.refreshAudio();
     },
   },
@@ -55,7 +55,7 @@ const actions = [
     defaults: { label: 'Headset', icon: '🎧', color: '#4a5568', colorOn: '#2b6cb0' },
     async run(p, ctx) {
       if (!p.device) throw new Error('Pick an output device first');
-      await ctx.helper.call('audio.setDefault', { flow: 'render', id: p.device });
+      await ctx.helper.call('audio.setDefault', { flow: 'render', device: p.device });
       ctx.refreshAudio();
     },
   },
@@ -71,7 +71,7 @@ const actions = [
     defaults: { label: 'Mic device', icon: '🎤', color: '#4a5568', colorOn: '#2b6cb0' },
     async run(p, ctx) {
       if (!p.device) throw new Error('Pick a microphone first');
-      await ctx.helper.call('audio.setDefault', { flow: 'capture', id: p.device });
+      await ctx.helper.call('audio.setDefault', { flow: 'capture', device: p.device });
       ctx.refreshAudio();
     },
   },
@@ -90,7 +90,7 @@ const actions = [
       const snap = await ctx.helper.call('audio.snapshot');
       const cur = snap.render && snap.render.id;
       const next = list[(list.indexOf(cur) + 1) % list.length];
-      await ctx.helper.call('audio.setDefault', { flow: 'render', id: next });
+      await ctx.helper.call('audio.setDefault', { flow: 'render', device: next });
       ctx.refreshAudio();
     },
   },
@@ -110,7 +110,7 @@ const actions = [
     async run(p, ctx) {
       const amount = Number(p.amount);
       if (!Number.isFinite(amount)) throw new Error('Amount must be a number');
-      const args = { flow: FLOW[p.target] || 'render', id: null };
+      const args = { flow: FLOW[p.target] || 'render', device: null };
       if (p.mode === 'set') args.volume = amount;
       else args.delta = p.mode === 'down' ? -amount : amount;
       await ctx.helper.call('audio.setVolume', args);

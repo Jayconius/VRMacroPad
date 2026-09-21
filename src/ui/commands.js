@@ -1,7 +1,7 @@
 // Things the UI asks the core to do. Config edits are applied optimistically and
 // rolled back with a message if the core refuses them (e.g. editing is locked).
 import * as net from './net.js';
-import { state, notify } from './state.js';
+import { state, notify, view } from './state.js';
 import { clone } from './util.js';
 import { toast } from './modal.js';
 
@@ -35,6 +35,7 @@ export async function saveConfig(mutate) {
 export function setActivePage(id) {
   state.activePage = id;
   notify();
+  if (view.overlay) return; // the overlay picks its own page; the desktop's page is not affected
   net.request('page.set', { id }).catch(() => {});
 }
 

@@ -12,6 +12,9 @@ const VR_POLL_MS = 3000;
 const MEDIA_POLL_MS = 1000;
 const TWITCH_POLL_MS = 10000;
 const SPOTIFY_POLL_MS = 8000;
+const VM_POLL_MS = 700;
+// Avatar parameters VRChat itself sends over OSC, shown as things a button can react to.
+const VRC_BUILTIN = { AFK: 'vrc.AFK', Seated: 'vrc.Seated', Earmuffs: 'vrc.Earmuffs', InStation: 'vrc.InStation', VRMode: 'vrc.VRMode' };
 
 // A test hook: while a tool keeps a fresh "fake signal" file in the data folder it stands in for the real
 // headset (used by the automated tests; nothing in the product writes it).
@@ -20,12 +23,13 @@ const FAKE_VR_MAX_AGE_MS = 3000;
 const FAKE_VR_SERVICE = '__steamvr_service__';
 const FAKE_VR_CLASS = { HMD: 'hmd', Controller: 'controller', GenericTracker: 'tracker', TrackingReference: 'basestation' };
 const VR_KNOWN_MAX = 40;
-const VR_KEYS = ['vr.connected', 'vr.lowBattery', 'vr.charging', 'vr.trackingLost', 'vr.hmdWorn', 'vr.dropped', 'vr.device', 'vr.snapshot'];
+const VR_KEYS = ['vr.connected', 'vr.lowBattery', 'vr.charging', 'vr.trackingLost', 'vr.hmdWorn', 'vr.dropped', 'vr.device', 'vr.snapshot', 'vr.motionSmoothing', 'vr.perfGraph', 'vr.boundsForced', 'vr.supersample'];
 const VR_TRACKED = new Set(['hmd', 'controller', 'tracker']);
 
 function emptyNeeds() {
   return {
     audio: false, process: false, obs: false, vrc: false, vrcParams: new Set(),
+    vm: false, vmParams: new Set(), vmMacros: new Set(),
     vr: false, media: new Set(), spotify: false, twitch: false, twitchAds: false, twitchStream: false, twitchModes: false, pear: false,
   };
 }
@@ -40,7 +44,7 @@ function parseTime(v) {
 }
 
 class Providers extends EventEmitter {
-  constructor({ helper, media, vr, twitch, pear, spotify = null, hub, now = () => Date.now(), dataDir = '', store = null }) {
+  constructor({ helper, media, vr, vm = null, twitch, pear, spotify = null, hub, now = () => Date.now(), dataDir = '', store = null }) {
     super();
     this.fakeVrPath = dataDir ? path.join(dataDir, FAKE_VR_FILE) : '';
     this.store = store;
@@ -53,6 +57,10 @@ class Providers extends EventEmitter {
     this.pear = pear;
     this.mediaHelper = media;
     this.vrHelper = vr;
+    this.vmHelper = vm;
+    this.vmTimer = null;
+    this.vmBusy = false;
+    this.vmData = { installed: true, connected: false, error: '' };
     this.twitch = twitch;
     this.spotify = spotify;
     this.spotTimer = null;
@@ -112,6 +120,7 @@ class Providers extends EventEmitter {
   configure(settings) {
     const prev = this.settings;
     this.settings = settings;
+    this.hub.set('vr.dimmed', Boolean(settings.overlay && settings.overlay.dim > 0));
     this.obs.configure(settings.obs);
     if (this.twitch) this.twitch.configure({ clientId: settings.twitch.clientId });
     if (this.pear) this.pear.configure(settings.pear);
@@ -128,6 +137,7 @@ class Providers extends EventEmitter {
     this.obs.want(needs.obs || Date.now() < this.obsAdHoc);
     if (needs.vrc && this.settings && this.settings.osc.listen) this.startVrc(); else this.stopVrc();
     if (needs.vr) this.startVr(); else this.stopVr();
+    if (needs.vm) this.startVm(); else this.stopVm();
     if (needs.media.size) this.startMedia(); else this.stopMedia();
     if (needs.twitch) this.startTwitch(); else this.stopTwitch();
     if (needs.spotify) this.startSpotify(); else this.stopSpotify();
@@ -143,6 +153,7 @@ class Providers extends EventEmitter {
     this.obs.want(false);
     this.stopVrc();
     this.stopVr();
+    this.stopVm();
     this.stopMedia();
     this.stopTwitch();
     this.stopSpotify();
@@ -171,6 +182,9 @@ class Providers extends EventEmitter {
       steamvr: this.needs.vr ? (this.vrData.connected ? 'connected' : 'off') : 'off',
       steamvrError: this.needs.vr ? this.vrData.error : '',
       steamvrSimulated: this.needs.vr && Boolean(this.vrData.simulated),
+      voicemeeter: this.needs.vm ? (this.vmData.connected ? 'connected' : 'connecting') : 'off',
+      voicemeeterError: this.needs.vm ? this.vmData.error : '',
+      voicemeeterInfo: this.needs.vm && this.vmData.connected ? `${this.vmData.typeName} ${this.vmData.version}` : '',
       media: this.mediaHelper && this.needs.media.size ? this.mediaHelper.status : 'off',
       mediaError: this.mediaHelper ? this.mediaHelper.error : '',
       twitch: this.twitch ? this.twitch.info() : { status: 'off' },
@@ -366,7 +380,9 @@ class Providers extends EventEmitter {
         this.applyVr(fake);
       } else {
         this.vrSimActive = false;
-        this.applyVr(await this.vrHelper.call('snapshot', {}, 6000));
+        const snap = await this.vrHelper.call('snapshot', {}, 6000);
+        this.applyVr(snap);
+        this.pollVrSettings(snap.connected).catch(() => {}); // not awaited: the picture of the devices must not wait for it
       }
       if (this.vrData.connected !== wasConnected) this.emit('status');
     } catch (err) {
@@ -380,6 +396,84 @@ class Providers extends EventEmitter {
 
   vrSnapshot() {
     return this.vrData;
+  }
+
+  // The few SteamVR settings buttons can follow (motion smoothing, performance graph, forced bounds, supersampling).
+  async pollVrSettings(connected) {
+    let values = null;
+    let forced = false;
+    if (connected) {
+      try {
+        const st = await this.vrHelper.call('settings.state', {}, 6000);
+        if (st.connected) { values = st.values || {}; forced = Boolean(st.boundsForced); }
+      } catch { /* an older helper or SteamVR going away: no settings this round */ }
+    }
+    this.hub.set('vr.motionSmoothing', Boolean(values && values['steamvr.motionSmoothing'] === true));
+    this.hub.set('vr.perfGraph', Boolean(values && values['steamvr.showPerfGraph'] === true));
+    this.hub.set('vr.boundsForced', forced);
+    this.hub.set('vr.supersample', values && Number.isFinite(values['steamvr.supersampleScale']) ? values['steamvr.supersampleScale'] : 0);
+  }
+
+  // Runs a SteamVR control command (change a setting, recenter...) and refreshes what buttons follow.
+  async vrControl(op, args = {}) {
+    if (!this.vrHelper) throw new Error('SteamVR control is not available');
+    if (this.vrSimActive) throw new Error('The SteamVR simulator is running instead of the real SteamVR');
+    try {
+      return await this.vrHelper.call(op, args, 8000);
+    } finally {
+      if (this.needs.vr) this.pollVr();
+    }
+  }
+
+  // ---- Voicemeeter ----
+  startVm() {
+    if (this.vmTimer || !this.vmHelper) return;
+    this.pollVm();
+    this.vmTimer = setInterval(() => this.pollVm(), VM_POLL_MS);
+  }
+
+  stopVm() {
+    clearInterval(this.vmTimer);
+    this.vmTimer = null;
+    if (this.vmHelper) this.vmHelper.release(); // logs out of Voicemeeter while nothing needs it
+    this.vmData = { installed: true, connected: false, error: '' };
+    for (const k of ['vm.connected', 'vm.param', 'vm.macro']) this.hub.remove(k);
+  }
+
+  async pollVm() {
+    if (this.vmBusy) return;
+    this.vmBusy = true;
+    try {
+      const res = await this.vmHelper.call('poll', { names: [...this.needs.vmParams], macros: [...this.needs.vmMacros] }, 4000);
+      const was = this.vmData.connected;
+      this.vmData = { installed: res.installed !== false, connected: Boolean(res.connected), error: res.connected ? '' : (res.error || 'Voicemeeter is not running'), typeName: res.typeName || '', version: res.version || '', strips: res.strips || 0, buses: res.buses || 0 };
+      this.hub.set('vm.connected', this.vmData.connected);
+      if (this.vmData.connected) {
+        this.hub.set('vm.param', res.values || {});
+        this.hub.set('vm.macro', res.macros || {});
+      } else {
+        this.hub.remove('vm.param');
+        this.hub.remove('vm.macro');
+      }
+      if (was !== this.vmData.connected) this.emit('status');
+    } catch (err) {
+      this.vmData = { installed: true, connected: false, error: err.message };
+      this.hub.set('vm.connected', false);
+      this.hub.remove('vm.param');
+      this.hub.remove('vm.macro');
+    } finally {
+      this.vmBusy = false;
+    }
+  }
+
+  // Sends one request to Voicemeeter (set, script, get...) and refreshes what buttons follow.
+  async vmCall(op, args = {}) {
+    if (!this.vmHelper) throw new Error('Voicemeeter control is not available');
+    try {
+      return await this.vmHelper.call(op, args, 6000);
+    } finally {
+      if (this.needs.vm) setTimeout(() => this.pollVm(), 60);
+    }
   }
 
   // ---- media ----
@@ -453,6 +547,13 @@ class Providers extends EventEmitter {
       // Only players that report shuffle / repeat to Windows (Spotify does) get the extra buttons.
       extras: r.shuffle === null || r.shuffle === undefined ? undefined : { shuffle: Boolean(r.shuffle), repeat: repeatNames[r.repeat] || 'NONE' },
     };
+  }
+
+  // What is playing on this PC right now (the first player that is playing, else the first with a title).
+  nowPlaying() {
+    const list = [...this.mediaInfo.values()].filter((i) => i && i.available && i.title);
+    const p = list.find((i) => i.playing) || list[0];
+    return p ? { title: p.title, artist: p.artist || '', playing: Boolean(p.playing) } : null;
   }
 
   mediaData(app) {
@@ -634,7 +735,7 @@ class Providers extends EventEmitter {
     this.listener = null;
     this.vrcStatus = 'off';
     this.vrcError = '';
-    for (const k of ['vrc.MuteSelf', 'vrc.avatar']) this.hub.remove(k);
+    for (const k of ['vrc.MuteSelf', 'vrc.avatar', ...Object.values(VRC_BUILTIN)]) this.hub.remove(k);
     this.emit('status');
   }
 
@@ -646,6 +747,7 @@ class Providers extends EventEmitter {
     const name = address.slice(prefix.length);
     const value = args[0];
     if (name === 'MuteSelf') { this.hub.set('vrc.MuteSelf', Boolean(value)); return; }
+    if (VRC_BUILTIN[name]) { this.hub.set(VRC_BUILTIN[name], Boolean(value)); return; }
     // Avatars stream dozens of parameters per second; only publish the ones something watches.
     if (this.needs.vrcParams.has(name) || name in this.vrcParams) this.remember(name, value);
   }
@@ -777,6 +879,17 @@ class Providers extends EventEmitter {
         }
         list.push({ value: 'pear', label: 'YouTube Music through the Pear API (album, like, shuffle, volume)' });
         return list;
+      }
+      case 'vm.devices': {
+        const res = await this.vmHelper.call('devices', {}, 6000);
+        const seen = new Set();
+        const out = [];
+        for (const d of [...(res.outputs || []), ...(res.inputs || [])]) {
+          if (seen.has(d.name)) continue;
+          seen.add(d.name);
+          out.push({ value: d.name, label: `${d.name}  (${d.driver.toUpperCase()})` });
+        }
+        return out;
       }
       case 'processes': return (await this.helper.call('proc.list')).sort().map((n) => ({ value: n, label: n }));
       case 'obs.scenes':

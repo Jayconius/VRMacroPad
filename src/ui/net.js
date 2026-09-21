@@ -18,6 +18,11 @@ function token() {
   try { return sessionStorage.getItem('vrmd-token') || ''; } catch { return ''; }
 }
 
+// The secret the pictures need in their address (kept out of the address bar by token() above).
+export function authToken() {
+  return token();
+}
+
 export function on(type, fn) {
   if (!listeners.has(type)) listeners.set(type, []);
   listeners.get(type).push(fn);

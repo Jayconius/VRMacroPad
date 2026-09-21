@@ -72,7 +72,7 @@ test('http: health, the UI shell, shared scripts and hardening headers', async (
   assert.equal(index.status, 200);
   assert.match(index.headers['content-type'], /text\/html/);
   assert.match(index.headers['content-security-policy'], /default-src 'self'/);
-  assert.match(index.headers['content-security-policy'], /frame-ancestors 'none'/);
+  assert.match(index.headers['content-security-policy'], /frame-ancestors 'self'/);
   assert.equal(index.headers['x-content-type-options'], 'nosniff');
   const grid = await httpGet(port, '/shared/grid.js');
   assert.equal(grid.status, 200);
@@ -323,7 +323,7 @@ test('about: the snapshot carries the version, author and links, and only the ap
   const c = await openWs(port, { token });
   const init = await next(c, 'init');
   assert.equal(init.app.version, require('../package.json').version);
-  assert.equal(init.app.version, '1.0.0');
+  assert.equal(init.app.version, require('../package.json').version);
   assert.equal(init.app.about.author, 'Jayconius');
   assert.equal(init.app.about.website, 'https://jayconius.com');
   assert.equal(init.app.about.github, 'https://github.com/Jayconius/VRMacroPad');

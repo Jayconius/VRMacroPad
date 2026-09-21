@@ -27,3 +27,8 @@ __pycache__/
 coverage/
 Thumbs.db
 .DS_Store
+
+# dev-only notes, the overlay dev launcher and probes stay on the developer PC
+docs/dev/
+Start Overlay Dev.bat
+scripts/overlay-flicker-probe.js

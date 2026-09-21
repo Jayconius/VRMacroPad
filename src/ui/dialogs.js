@@ -4,7 +4,7 @@ import { state, currentPage, subscribe } from './state.js';
 import { openModal, confirmDialog, toast } from './modal.js';
 import { saveConfig, setActivePage } from './commands.js';
 import * as net from './net.js';
-import { field, textInput, selectInput, checkbox, hotkeyField, optionsField } from './forms.js';
+import { field, textInput, selectInput, checkbox, hotkeyField, optionsField, staticMultiField } from './forms.js';
 
 const Grid = window.Grid;
 
@@ -186,7 +186,7 @@ export function openSettings() {
 
   const renderTabs = () => {
     clear(tabsEl);
-    for (const [id, label] of [['general', 'General'], ['editing', 'Editing lock'], ['window', 'Window'], ['connections', 'Connections'], ['data', 'Backup & data'], ['about', 'About']]) {
+    for (const [id, label] of [['general', 'General'], ['editing', 'Editing lock'], ['window', 'Window'], ['connections', 'Connections'], ['overlay', 'VR overlay'], ['data', 'Backup & data'], ['about', 'About']]) {
       tabsEl.append(h('button', { class: `tab${tab === id ? ' on' : ''}`, onclick: () => { tab = id; renderTabs(); renderContent(); } }, label));
     }
   };
@@ -194,6 +194,7 @@ export function openSettings() {
   const general = () => h('div', { class: 'stack' },
     field('Theme', selectInput([['dark', 'Dark'], ['light', 'Light']], draft.theme, (v) => { draft.theme = v; })),
     field('Accent color', (() => { const i = h('input', { type: 'color', value: draft.accent }); i.addEventListener('input', () => { draft.accent = i.value; }); return i; })()),
+    checkbox('Play button animations (pulse, flash, glow...)', draft.animations !== false, (v) => { draft.animations = v; }),
     field(`Space between buttons`, textInput(draft.gap, (v) => { draft.gap = Math.max(0, Math.min(40, Number(v) || 0)); }, { type: 'number', min: 0, max: 40 }), { help: 'In pixels.' }));
 
   const editing = () => h('div', { class: 'stack' },
@@ -211,6 +212,8 @@ export function openSettings() {
       { help: 'Also on the eye button in the top bar and in the tray menu. Everything but the pages and buttons turns see-through, so it floats over your game or desktop; use the faint ⋯ button or this hotkey to bring the rest back.' }),
     h('p', { class: 'field-help' }, 'Drag the top bar to move it and the edges to resize. The window is rebuilt when you save.'),
     checkbox('Show in the taskbar like a normal app', draft.window.showInTaskbar, (v) => { draft.window.showInTaskbar = v; }),
+    checkbox('Start with no window (only the tray icon), for using it only in VR', draft.window.startHidden, (v) => { draft.window.startHidden = v; }),
+    draft.window.startHidden ? h('p', { class: 'field-help' }, 'The deck still runs and shows in SteamVR. Click the tray icon (or start the app again) to bring this window up when you want to edit. The tray icon may be inside the ^ arrow next to the clock.') : null,
     field('Closing the window', selectInput([['quit', 'Quits the app'], ['tray', 'Hides it to the tray (hotkeys and triggers keep working)']], draft.window.closeToTray ? 'tray' : 'quit', (v) => { draft.window.closeToTray = v === 'tray'; })),
     checkbox('Clicking the window does not steal focus from your game', draft.window.nonActivating, (v) => { draft.window.nonActivating = v; }),
     h('p', { class: 'field-help' }, 'Keep this on. Otherwise keystroke macros go to this window instead of your game. The window still takes focus while a dialog with text fields is open.'),
@@ -274,6 +277,53 @@ export function openSettings() {
       h('h3', null, 'SteamVR'),
       field('Low-battery warning (%)', textInput(draft.vr.lowBatteryPercent, (v) => { draft.vr.lowBatteryPercent = Math.max(1, Math.min(90, Number(v) || 15)); }, { type: 'number', min: 1, max: 90 }), { help: 'Used by the "battery is low" trigger and color. Needs SteamVR running.' }),
       statusRow('SteamVR link', st.steamvr || 'off', st.steamvrSimulated ? 'Showing a SIMULATED rig (fake signal file). Close the simulator to go back to real SteamVR.' : st.steamvrError));
+  };
+
+  // ---- the SteamVR overlay ----
+  const overlayTab = () => {
+    const o = draft.overlay;
+    const st = state.status.overlay || { state: 'off' };
+    const dot = { off: 'off', starting: 'connecting', waiting: 'connecting', connected: 'connected', error: 'error', unavailable: 'off' }[st.state] || 'off';
+    const detail = {
+      waiting: 'Waiting for SteamVR to start. It never starts SteamVR itself.',
+      connected: st.shown ? 'Showing in SteamVR.' : 'Connected to SteamVR.',
+      unavailable: 'Only available in the desktop app.',
+    }[st.state] || st.error || '';
+    const num = (get, set, opts) => textInput(get(), (v) => { if (v !== '' && Number.isFinite(v)) set(v); }, { type: 'number', ...opts });
+    const anchorNames = [['front', 'In front of me (follows my head)'], ['room', 'In the room (stays where I leave it)'], ['wrist', 'On my wrist']];
+    const offset = o.offsets[o.anchor];
+    const off = (key, label, opts) => field(label, num(() => offset[key], (v) => { offset[key] = v; }, { step: 0.01, ...opts }));
+    return h('div', { class: 'stack' },
+      h('p', { class: 'field-help' }, 'Shows this same deck as a panel inside SteamVR (works next to XSOverlay and OVR Toolkit). Everything you change in the app appears in it live. You can grab it, move it, anchor it to your wrist and resize it from inside VR. It is always in use mode: editing stays here on the desktop.'),
+      checkbox('Show the deck in SteamVR', o.enabled, (v) => { o.enabled = v; }),
+      statusRow('SteamVR overlay', dot, detail),
+      h('hr'),
+      field('Where it sits', selectInput(anchorNames, o.anchor, (v) => { o.anchor = v; renderContent(); })),
+      o.anchor === 'wrist' ? field('Which wrist', selectInput([['left', 'Left'], ['right', 'Right']], o.hand, (v) => { o.hand = v; })) : null,
+      o.anchor === 'wrist' ? h('p', { class: 'field-help' }, 'In VR: hold the trigger on the handle, carry the panel to your wrist and let go: it snaps on (the Wrist button lights up when you are close enough). Let go near the same wrist again after turning it to fix the angle, or use the turn / tilt / flip buttons that appear on the overlay. Drop it anywhere else and it leaves the wrist and stays in the room.') : null,
+      field(`Size (${o.anchor}), in meters wide`, num(() => o.widths[o.anchor], (v) => { o.widths[o.anchor] = v; }, { min: 0.1, max: 3, step: 0.05 }), { help: 'About 0.7 is a comfortable size in front of you, 0.3 suits a wrist. Bigger is easier to hit with the laser. You can also use − and + on the overlay itself.' }),
+      h('div', { class: 'row gap' },
+        field('Opacity (%)', num(() => Math.round(o.opacity * 100), (v) => { o.opacity = v / 100; }, { min: 10, max: 100, step: 5 })),
+        field('Curve (%)', num(() => Math.round(o.curvature * 100), (v) => { o.curvature = v / 100; }, { min: 0, max: 100, step: 5 })),
+        field('Sharpness', selectInput([['768', 'Low (768 px)'], ['1024', 'Normal (1024 px)'], ['1536', 'High (1536 px)'], ['2048', 'Very high (2048 px)']], String(o.resolution), (v) => { o.resolution = Number(v); }))),
+      field('Dim the view (percent dark)', num(() => Math.round(o.dim * 100), (v) => { o.dim = Math.max(0, Math.min(90, v)) / 100; }, { min: 0, max: 90, step: 5 }), { help: 'A dark sheet in front of your eyes for any headset; the deck and dashboard stay bright. Also on the dashboard and as a button.' }),
+      field('Pages shown in VR', staticMultiField({ options: state.config.pages.map((p) => [p.id, p.name]), value: o.pages, onChange: (v) => { o.pages = v; } }), { help: 'Leave all unticked to show every page. The overlay keeps its own current page, separate from the one in this window.' }),
+      checkbox('Show the tool strip on the overlay (size, anchor, pin, bring back, collapse)', o.showBar, (v) => { o.showBar = v; }),
+      checkbox('Pinned: it cannot be grabbed and moved', o.locked, (v) => { o.locked = v; }),
+      checkbox('Only show it while I am looking at it (made for the wrist)', o.glance, (v) => { o.glance = v; }),
+      checkbox('Hidden for now', o.hidden, (v) => { o.hidden = v; }),
+      field('Hotkey to hide / show it', textInput(o.hotkey, (v) => { o.hotkey = v.trim(); }, { placeholder: 'e.g. Ctrl+Alt+Shift+O (empty = none)' })),
+      h('details', { class: 'advanced' }, h('summary', null, `Fine position (${o.anchor})`),
+        h('p', { class: 'field-help' }, o.anchor === 'wrist' ? 'The standard wrist position, used until you adjust it in VR. Each controller type (Index, Quest, Vive...) and hand remembers its own adjustment.' : 'Grabbing it in VR sets these for you. Meters and degrees, relative to what it follows.'),
+        o.anchor === 'wrist' && Object.keys(o.wristOffsets || {}).length ? h('div', { class: 'row gap' }, h('span', { class: 'muted small' }, `Adjusted for: ${Object.keys(o.wristOffsets).join(', ')}`), h('button', { class: 'btn-secondary small', onclick: () => { o.wristOffsets = {}; renderContent(); } }, 'Forget my adjustments')) : null,
+        h('div', { class: 'row gap' }, off('x', 'Right (m)'), off('y', 'Up (m)'), off('z', 'Toward me (m)')),
+        h('div', { class: 'row gap' }, off('yaw', 'Turn (°)', { step: 1 }), off('pitch', 'Tilt (°)', { step: 1 }), off('roll', 'Roll (°)', { step: 1 })),
+        h('div', { class: 'row gap' },
+          h('button', { class: 'btn-secondary small', onclick: () => { Object.assign(offset, state.app.overlayDefaults[o.anchor]); renderContent(); } }, 'Reset to the default spot'),
+          h('button', { class: 'btn-secondary small', onclick: () => net.request('overlay.bring').then(() => toast('Brought back to you (Save first if you changed things here).'), (e) => toast(e.message, 'error')) }, 'Bring it back to me now'))),
+      field('How pictures reach SteamVR', selectInput([['auto', 'Smooth (GPU texture)'], ['raw', 'Compatible (copies pixels; can flicker)']], o.upload, (v) => { o.upload = v; }), { help: 'Smooth is the default. Switch to Compatible only if the deck does not show up at all.' }),
+      checkbox('Show the self-check readout on the overlay (for testing)', o.diagnostics, (v) => { o.diagnostics = v; }),
+      h('p', { class: 'field-help' }, 'The readout shows where the app thinks your laser is (a yellow ring follows it), which controllers SteamVR sees, and what just happened. It is also written to overlay.log in the data folder.'));
   };
 
   // A link that opens in your normal browser (the app window itself never navigates away).
@@ -343,7 +393,7 @@ export function openSettings() {
 
   function renderContent() {
     clear(content);
-    content.append({ general, editing, window: windowTab, connections, data: dataTab, about: aboutTab }[tab]());
+    content.append({ general, editing, window: windowTab, connections, overlay: overlayTab, data: dataTab, about: aboutTab }[tab]());
   }
 
   async function saveSettings(closeAfter = true) {

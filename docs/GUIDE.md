@@ -2,8 +2,8 @@
 
 [← Back to the README](../README.md)
 
-Colored push-button macros and live mini screens for Windows. Use it on the desktop, or pin the
-window in VR with OVR Toolkit, XSOverlay or Desktop+ (any tool that can show a window).
+Colored push-button macros and live mini screens for Windows. Use it on the desktop, or float it in VR as a native
+**SteamVR overlay** (see [VR-OVERLAY.md](VR-OVERLAY.md)). The window also still works with OVR Toolkit, XSOverlay or Desktop+.
 
 ## Run it
 
@@ -49,10 +49,24 @@ game. It works while editing is locked. The faint **⋯** at the top right (or t
 editing does too. The window is rebuilt when you switch (a blink), and a see-through window is resized by dragging its thin
 invisible edges, not the usual window border. Whether a VR overlay app keeps the transparency depends on that app.
 
+### Buttons: look, pictures and effects
+
+Click a button (editing unlocked) and open the **Look** tab: label and icon, color (and a color when active), and:
+
+* **Pictures**: pick a PNG, JPEG, GIF or WebP (up to 8 MB), one for the normal state and one for the active state. GIFs animate.
+  Choose *fill the button* or *show the whole picture*. Pictures are stored in `%APPDATA%\VR Macro Pad\images` under a hash name and only
+  served to the app itself. Pictures no button uses any more are removed after a day. SVG is not accepted (it can carry scripts).
+* **Animations**, separately for *active* and *not active*, with a speed: **pulse** (fade), **breathe** (gentle grow), **flash** (blink, for
+  warnings), **glow** (a swelling halo), **ripple** (rings spreading out), **heartbeat**, **shake** (a jolt now and then), **bounce**,
+  **hazard stripes** (moving warning stripes, unmissable) and **color cycle**. A good use is *flash* or *hazard* on "mic is live"
+  and *heartbeat* on "recording". Settings → General → *Play button animations* switches them all off.
+
 ### Pinning it in VR
 
-1. Start VR Macro Pad and leave its window open and not minimized.
-2. In OVR Toolkit / XSOverlay / Desktop+, add a window capture and choose **VR Macro Pad**.
+The best way is the native overlay: Settings → **VR overlay**, then start SteamVR (see [VR-OVERLAY.md](VR-OVERLAY.md)). To use a
+window capture instead: leave the window open and not minimized, and in OVR Toolkit / XSOverlay / Desktop+ add a window capture of
+**VR Macro Pad**. With **Start with no window** (Settings → Window, or the tray menu) the desktop window stays hidden and only the
+overlay shows.
 
 ## Mini screens ("widgets")
 
@@ -80,9 +94,10 @@ items and the two Twitch ones with the other Twitch items. They are buttons that
 | Media | play / pause / next / previous for any player (pick the app: Automatic, Spotify, YouTube Music, a browser...) |
 | Spotify | play / pause / skip, shuffle, repeat, skip forward / back, Spotify's own volume (all through Windows, no login), and **Like** (needs a one-time Spotify connection, see below) |
 | YouTube Music (Pear Desktop) | play / pause / skip, like / dislike, shuffle, repeat (or jump to a mode), volume, skip forward / back |
-| SteamVR | start, quit, restart |
+| SteamVR | start, quit, restart, **supersampling**, **motion smoothing**, **headset brightness** (driver colour gain), **dim the view** (any headset), **play-area bounds** (show / look), **performance graph**, **recenter** (seated). Everything except start / quit needs SteamVR running |
+| Voicemeeter | mute / solo / mono / send to A1-B3 / EQ on strips, buses and the recorder, **gain** (set, raise, lower, fade), **macro buttons** 0-79, engine commands (restart, presets, save / load), **choose audio devices**, per-app volume (Potato), any **script** command |
 | OBS | switch scene, record, stream, save replay (clip), replay buffer, mute a source, any raw request |
-| VRChat (OSC) | mic mute (color follows your real state), chatbox message, avatar parameter, change avatar |
+| VRChat (OSC) | mic mute (color follows your real state), chatbox message (also with `{song}` `{artist}` `{time}` `{date}`), clear chatbox, typing bubble, avatar parameter and **parameter steps** (outfit up / down / around), change avatar, **game controls** (jump, run, move, turn, use / grab / drop, Quick Menu, panic), **walk / turn for a moment**, **any OSC message** to VRChat or another app |
 | Twitch | chat message, announcement, chat modes (emote-only, followers, subs, slow, unique), shield mode, snooze / run ads, clear chat, stream marker, clip, raid, shoutout, title / category |
 | Web & smart home | HTTP request / webhook, Home Assistant service call |
 
@@ -108,6 +123,9 @@ Every button is a list of steps with optional delays.
   (set its hostname to `127.0.0.1` so only this PC can reach it), then Settings → Connections → YouTube Music →
   **Connect Pear**, and click **Allow** in the Pear window once. Set the widget's Player to `pear`.
   Pear's volume takes the slider position but reports loudness on a curve; the app converts, so "raise by 10" moves the slider by 10.
+* **Voicemeeter**: install it (Standard, Banana or Potato) and run it. The app finds VB-Audio's Remote API by itself (`VoicemeeterRemote64.dll`,
+  installed with Voicemeeter) and only connects while a button needs it. Numbers in the forms start at 1 like Voicemeeter's labels. For
+  anything not in the forms, use *Custom command* with Voicemeeter's own scripting language, e.g. `Strip[0].Mute=1; Bus[0].Gain=-6;`.
 * **SteamVR battery**: nothing to set up. The app links to SteamVR only while a battery widget or trigger needs it, and
   only if SteamVR is already running (it never starts it). What shows up depends on what your headset's driver reports.
   Devices seen before are remembered, so a tracker that is switched off still appears (greyed, with its last level).
@@ -131,10 +149,11 @@ Home Assistant passwords are stored in plain text in your config; layout export 
 
 ## Limits and honesty
 
-* **No live SteamVR settings** (motion smoothing, supersampling, chaperone...) or **controller bindings.** Battery,
-  charging, tracking and "headset worn" *reading* is in; the rest needs more OpenVR work.
-* The SteamVR battery was tested against fakes, never against a live headset by the author. (Twitch has been
-  exercised against a real account.) If something does not match, the
+* **No SteamVR controller bindings.** The overlay uses the laser and trigger; a hotkey and the tray menu can show / hide it.
+* The overlay, dashboard entry, editor and their settings have been used on a real headset. **Not tried on real hardware:** the SteamVR
+  battery screen, Voicemeeter (tested against a built-in test double and VB-Audio's documentation), headset brightness (needs driver
+  support; "Dim the view" does not), and the SteamVR keyboard in the VR editor. (Twitch has been exercised against a real account.)
+  If something does not match, the
   *Info → Status* and *Activity* tabs show the exact error.
 * Keystrokes cannot be sent into windows running as administrator (or protected by some anti-cheat) unless this app
   is also run as administrator.
@@ -144,14 +163,15 @@ Home Assistant passwords are stored in plain text in your config; layout export 
 
 * Config, backups, token, secrets: `%APPDATA%\VR Macro Pad\` (the last 20 layouts are backed up automatically).
 * Code: `src/core` (actions, widgets, engine, providers, Twitch, server), `src/ui` (the web UI), `src/main` (Electron
-  shell), `src/helper` (three small C# programs for audio/keys, media sessions and SteamVR, compiled on first run with
+  shell), `src/helper` (small C# programs for audio/keys, media sessions, SteamVR, the SteamVR overlay and Voicemeeter, compiled on first run with
   the compiler that ships with Windows). `vendor/openvr` is Valve's official OpenVR SDK (BSD licence, see its LICENSE). `src/ui/assets/devices` (the device pictures) come from the author's other app, OhFudgeMyBatteryChat (MIT, see the
   README there).
 
 ## For developers
 
 ```
-npm test              # 151 tests: logic, protocols against fake OBS / VRChat / Twitch / Pear, server security, real Windows helpers (read-only)
+npm test              # 217 tests: logic, protocols against fake OBS / VRChat / Twitch / Pear / Voicemeeter, server security, real Windows helpers
+npm run test:overlay  # renders the overlay page off-screen and drives it with fake laser events (~100 checks)
 npm run dist            # builds the installer and the portable exe into dist/ (needs internet the first time)
 npm run test:clean    # launches the real app to check the buttons-only view is really see-through
 npm run smoke         # launches the real desktop app once and checks it

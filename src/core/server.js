@@ -13,6 +13,7 @@ const { WebSocketServer } = require('ws');
 const { catalogForUi, defs } = require('./actions');
 const { stripSecrets } = require('./store');
 const appConfig = require('./app-config');
+const overlayLogic = require('./overlay-logic');
 
 const MIME = {
   '.html': 'text/html; charset=utf-8',
@@ -30,7 +31,7 @@ function safeEqual(a, b) {
   return x.length === y.length && crypto.timingSafeEqual(x, y);
 }
 
-function createServer({ engine, providers, helper, store, hooks, token, uiDir, sharedDir, version, devMode }) {
+function createServer({ engine, providers, helper, store, images, hooks, token, uiDir, sharedDir, version, devMode }) {
   let port = 0;
   const clients = new Set();
 
@@ -52,7 +53,7 @@ function createServer({ engine, providers, helper, store, hooks, token, uiDir, s
         'Content-Type': MIME[path.extname(target)] || 'application/octet-stream',
         'Cache-Control': rel.startsWith('assets/') ? 'max-age=3600' : 'no-cache',
         'X-Content-Type-Options': 'nosniff',
-        'Content-Security-Policy': `default-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self' ws://127.0.0.1:${port} ws://localhost:${port}; frame-ancestors 'none'`,
+        'Content-Security-Policy': `default-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self' ws://127.0.0.1:${port} ws://localhost:${port}; frame-ancestors 'self'`,
       });
       res.end(data);
     });
@@ -72,12 +73,22 @@ function createServer({ engine, providers, helper, store, hooks, token, uiDir, s
       res.writeHead(405).end('Method not allowed');
       return;
     }
+    // Button pictures: private to the app, so they need the secret token like the websocket does.
+    if (url.pathname.startsWith('/user-images/')) {
+      let wanted = '';
+      try { wanted = decodeURIComponent(url.pathname.slice('/user-images/'.length)); } catch { /* a broken address: not found */ }
+      const img = images && safeEqual(url.searchParams.get('token') || '', token) ? images.read(wanted) : null;
+      if (!img) { res.writeHead(404).end('Not found'); return; }
+      res.writeHead(200, { 'Content-Type': img.type, 'Cache-Control': 'private, max-age=86400', 'X-Content-Type-Options': 'nosniff', 'Content-Security-Policy': "default-src 'none'" });
+      res.end(img.data);
+      return;
+    }
     if (url.pathname.startsWith('/shared/')) return serveFile(res, sharedDir, url.pathname.slice('/shared/'.length));
     const rel = url.pathname === '/' ? 'index.html' : url.pathname.slice(1);
     return serveFile(res, uiDir, rel);
   });
 
-  const wss = new WebSocketServer({ noServer: true, maxPayload: 4 * 1024 * 1024 });
+  const wss = new WebSocketServer({ noServer: true, maxPayload: 14 * 1024 * 1024 }); // room for an 8 MB picture sent as base64
 
   httpServer.on('upgrade', (req, socket, head) => {
     const url = new URL(req.url, 'http://x');
@@ -100,7 +111,7 @@ function createServer({ engine, providers, helper, store, hooks, token, uiDir, s
     for (const ws of clients) if (ws.readyState === 1) ws.send(data);
   }
 
-  const status = () => ({ ...providers.status(), editLocked: !engine.editing });
+  const status = () => ({ ...providers.status(), editLocked: !engine.editing, overlay: hooks.overlayInfo ? hooks.overlayInfo() : { state: 'unavailable' } });
 
   function snapshot() {
     return {
@@ -113,7 +124,8 @@ function createServer({ engine, providers, helper, store, hooks, token, uiDir, s
       edit: engine.editState(),
       status: status(),
       log: engine.log,
-      app: { version, about: { author: appConfig.author, website: appConfig.website, github: appConfig.githubUrl }, devMode: Boolean(devMode), platform: process.platform, hasHost: Boolean(hooks.isDesktop), twitchBuiltIn: Boolean(providers.twitch && providers.twitch.defaultClientId) },
+      overlay: overlayLogic.pictureSize(engine.config.settings.overlay.resolution),
+      app: { version, overlayDefaults: overlayLogic.DEFAULT_OFFSETS, about: { author: appConfig.author, website: appConfig.website, github: appConfig.githubUrl }, devMode: Boolean(devMode), platform: process.platform, hasHost: Boolean(hooks.isDesktop), twitchBuiltIn: Boolean(providers.twitch && providers.twitch.defaultClientId) },
     };
   }
 
@@ -147,7 +159,16 @@ function createServer({ engine, providers, helper, store, hooks, token, uiDir, s
     },
     async 'config.set'(msg) {
       requireEditing();
-      return { warnings: engine.updateConfig(msg.config) };
+      const warnings = engine.updateConfig(msg.config);
+      if (images) images.gc(engine.config);
+      return { warnings };
+    },
+    // A picture for a button (sent as base64). Returns the name to put in the button.
+    async 'image.add'(msg) {
+      requireEditing();
+      if (!images) throw new Error('Pictures are not available here');
+      if (typeof msg.data !== 'string' || msg.data.length > 12 * 1024 * 1024) throw new Error('That picture is too big');
+      return images.add(Buffer.from(msg.data, 'base64'));
     },
     async options(msg) {
       return providers.options(String(msg.kind));
@@ -180,6 +201,65 @@ function createServer({ engine, providers, helper, store, hooks, token, uiDir, s
       if (![msg.x, msg.y, msg.width, msg.height].every((v) => Number.isFinite(Number(v)))) throw new Error('Bad window size');
       hooks.setWindowBounds({ x: n(msg.x), y: n(msg.y), width: n(msg.width), height: n(msg.height) });
       return true;
+    },
+    // ---- SteamVR overlay controls: where it is, how big, pinned, collapsed. View preferences, not layout edits. ----
+    async 'overlay.anchor'(msg) {
+      if (!overlayLogic.ANCHORS.includes(msg.anchor)) throw new Error('Unknown anchor');
+      engine.patchSettings((s) => { s.overlay.anchor = msg.anchor; if (overlayLogic.HANDS.includes(msg.hand)) s.overlay.hand = msg.hand; });
+      return true;
+    },
+    // dir: +1 / -1 steps through the preset sizes; width: an exact size in meters.
+    async 'overlay.size'(msg) {
+      engine.patchSettings((s) => {
+        const o = s.overlay;
+        if (msg.reset) { o.widths[o.anchor] = overlayLogic.DEFAULT_WIDTHS[o.anchor]; return; }
+        o.widths[o.anchor] = msg.width !== undefined ? overlayLogic.clampWidth(msg.width) : overlayLogic.stepWidth(o.widths[o.anchor], Number(msg.dir) >= 0 ? 1 : -1);
+      });
+      return true;
+    },
+    async 'overlay.toggle'(msg) {
+      if (!['locked', 'collapsed', 'hidden', 'showBar', 'glance', 'enabled'].includes(msg.key)) throw new Error('Unknown switch');
+      engine.patchSettings((s) => { s.overlay[msg.key] = msg.on === undefined ? !s.overlay[msg.key] : Boolean(msg.on); });
+      return true;
+    },
+    // Things that need the desktop shell (it talks to SteamVR): grab / drop the panel, bring it back to you.
+    async 'overlay.grab'(msg) {
+      return hooks.overlayCommand(msg.on ? 'grab' : 'drop');
+    },
+    // Turn / tilt / flip the panel on the wrist, swap wrists, or reset its wrist position.
+    async 'overlay.adjust'(msg) {
+      if (!['roll', 'pitch', 'yaw', 'flip', 'reset', 'hand'].includes(msg.kind)) throw new Error('Unknown adjustment');
+      return hooks.overlayCommand('adjust', { kind: msg.kind, amount: Number(msg.amount) || 0 });
+    },
+    // level: 0-90 percent; dir: +1 / -1 steps of 10 percent.
+    async 'overlay.dim'(msg) {
+      engine.patchSettings((s) => {
+        const o = s.overlay;
+        const now = Math.round(o.dim * 100);
+        const next = msg.level !== undefined ? Number(msg.level) : now + (Number(msg.dir) >= 0 ? 10 : -10);
+        o.dim = Math.max(0, Math.min(90, Math.round(next))) / 100;
+      });
+      return true;
+    },
+    // "I lost it": visible, not shrunk, the standard size for every anchor, and back within reach.
+    async 'overlay.reset'() {
+      engine.patchSettings((s) => {
+        const o = s.overlay;
+        o.hidden = false;
+        o.collapsed = false;
+        o.widths = { ...overlayLogic.DEFAULT_WIDTHS };
+      });
+      return hooks.overlayCommand('bring');
+    },
+    // The editor inside SteamVR's dashboard asks for SteamVR's on-screen keyboard when a text box gets focus.
+    async 'dash.keyboard'(msg) {
+      return hooks.overlayCommand('keyboard', { text: String(msg.text || '').slice(0, 4000), multiline: Boolean(msg.multiline), password: Boolean(msg.password), desc: String(msg.desc || '').slice(0, 200) });
+    },
+    async 'dash.keyboard.hide'() {
+      return hooks.overlayCommand('keyboard.hide');
+    },
+    async 'overlay.bring'() {
+      return hooks.overlayCommand('bring');
     },
     // Widgets: tap / hold / media commands. Not gated by the edit lock: using a widget is using the deck.
     async widget(msg) {

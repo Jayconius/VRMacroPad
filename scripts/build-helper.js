@@ -8,7 +8,7 @@ const { execFileSync } = require('child_process');
 const ROOT = path.join(__dirname, '..');
 const WINMD = path.join(process.env.WINDIR || 'C:\\Windows', 'System32', 'WinMetadata');
 
-// audio: keys + Windows audio. media: media sessions (Spotify etc). vr: SteamVR battery.
+// audio: keys + Windows audio. media: media sessions (Spotify etc). vr: SteamVR battery. overlay: the SteamVR overlay.
 const TARGETS = {
   audio: {
     exe: 'vrmd-helper.exe',
@@ -25,6 +25,22 @@ const TARGETS = {
     sources: ['src/helper/VrHelper.cs', 'vendor/openvr/openvr_api.cs'],
     refs: ['System.Web.Extensions.dll'],
     flags: ['/platform:x64'], // openvr_api.dll is 64-bit
+    copy: ['vendor/openvr/openvr_api.dll'],
+  },
+  // voicemeeter: controls Voicemeeter through its official Remote API (the DLL comes with Voicemeeter, nothing is bundled).
+  voicemeeter: {
+    exe: 'vrmd-voicemeeter.exe',
+    sources: ['src/helper/VoiceMeeter.cs'],
+    refs: ['System.Web.Extensions.dll'],
+    flags: ['/platform:x64'],
+    copy: [],
+  },
+  // overlay: puts the app's picture into SteamVR and reports laser clicks back.
+  overlay: {
+    exe: 'vrmd-overlay.exe',
+    sources: ['src/helper/VrOverlay.cs', 'vendor/openvr/openvr_api.cs'],
+    refs: ['System.Web.Extensions.dll'],
+    flags: ['/platform:x64'],
     copy: ['vendor/openvr/openvr_api.dll'],
   },
 };

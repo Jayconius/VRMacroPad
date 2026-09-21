@@ -1,7 +1,10 @@
 // Entry point: top bar, lock button, and wiring between the core's pushed events and the views.
 import { h, clear } from './util.js';
 import * as net from './net.js';
-import { state, notify, subscribe, currentPage } from './state.js';
+import { state, notify, subscribe, currentPage, view, overlayPages } from './state.js';
+import { renderOverlayTopbar, startOverlayExtras } from './overlay-view.js';
+import { renderDashboard } from './dashboard-view.js';
+import { startVrInput } from './vr-input.js';
 import { toast, anyModalOpen } from './modal.js';
 import { createGridView } from './grid-view.js';
 import { startNewButton, editButton } from './editor.js';
@@ -92,6 +95,7 @@ function statusDots() {
   const add = (label, s) => { if (s && s !== 'off') dots.push(h('span', { class: `chip ${s}`, title: `${label}: ${s}` }, h('span', { class: `dot ${s}` }), label)); };
   add('OBS', st.obs);
   add('VRChat', st.vrc);
+  add('Voicemeeter', st.voicemeeter);
   if (st.helper === 'error') add('Helper', 'error');
   return dots;
 }
@@ -101,6 +105,7 @@ function statusDots() {
 let topbarSignature = '';
 
 function renderTopbar() {
+  if (view.overlay) { renderOverlayTopbar(topbar); return; }
   const st = state.status;
   const signature = JSON.stringify([
     state.config.pages.map((p) => [p.id, p.name]), state.activePage, state.edit.on, state.edit.unlockMethod,
@@ -138,7 +143,7 @@ function renderTopbar() {
 }
 
 function renderBanner() {
-  const on = state.edit.on;
+  const on = state.edit.on && !view.overlay;
   banner.hidden = !on;
   if (!on) return;
   const left = state.edit.relockAt ? Math.max(0, Math.round((state.edit.relockAt - Date.now()) / 1000)) : 0;
@@ -149,8 +154,12 @@ let cleanExitRequested = false;
 
 function applyTheme() {
   const s = state.config.settings;
-  const clean = Boolean(state.app.hasHost && s.window.cleanView);
-  document.body.classList.toggle('frameless', Boolean(state.app.hasHost && (s.window.frameless || s.window.cleanView)));
+  const clean = Boolean(!view.overlay && state.app.hasHost && s.window.cleanView);
+  document.body.classList.toggle('no-fx', s.animations === false);
+  document.body.classList.toggle('overlay', view.overlay);
+  document.documentElement.classList.toggle('overlay', view.overlay);
+  document.body.classList.toggle('collapsed', Boolean(view.overlay && s.overlay && s.overlay.collapsed));
+  document.body.classList.toggle('frameless', Boolean(!view.overlay && state.app.hasHost && (s.window.frameless || s.window.cleanView)));
   document.body.classList.toggle('clean', clean);
   document.documentElement.classList.toggle('clean', clean);
   edges.hidden = !clean;
@@ -163,7 +172,13 @@ function applyTheme() {
 
 function render() {
   if (!state.ready) return;
+  if (view.overlay) {
+    // its own page, chosen from the ones the overlay is allowed to show
+    const allowed = overlayPages();
+    if (!allowed.some((p) => p.id === state.activePage) && allowed[0]) state.activePage = allowed[0].id;
+  }
   applyTheme();
+  if (view.dashboard) { document.body.classList.add('dashboard'); renderDashboard(); return; }
   renderTopbar();
   renderBanner();
   grid.render();
@@ -202,14 +217,16 @@ net.on('init', (m) => {
     ready: true, config: m.config, catalog: m.catalog, buttonStates: m.buttonStates, widgetData: m.widgetData || {}, activePage: m.activePage,
     edit: m.edit, status: m.status, log: m.log, app: m.app,
   });
+  if (view.overlay) state.edit = { on: false, relockAt: 0, unlockMethod: 'hold' }; // the overlay is always in use mode
+  if (view.editor) state.app.hasHost = false; // no window buttons or see-through view inside VR
   syncClock(state.widgetData);
   notify();
 });
 net.on('widgetData', (m) => { state.widgetData = m.data; syncClock(m.data); notify(); });
 net.on('config', (m) => { state.config = m.config; notify(); });
 net.on('buttonStates', (m) => { state.buttonStates = m.states; notify(); });
-net.on('page', (m) => { state.activePage = m.id; notify(); });
-net.on('edit', (m) => { state.edit = m.edit; notify(); });
+net.on('page', (m) => { if (!view.overlay) state.activePage = m.id; notify(); });
+net.on('edit', (m) => { state.edit = view.overlay ? { ...m.edit, on: false } : m.edit; notify(); });
 net.on('status', (m) => { state.status = m.status; notify(); });
 net.on('running', (m) => { if (m.on) state.running.add(m.id); else state.running.delete(m.id); notify(); });
 net.on('pressResult', (m) => grid.flash(m.id, m.ok));
@@ -219,6 +236,8 @@ net.on('toast', (m) => {
   toast(m.entry.text, m.entry.level);
 });
 
+if (view.overlay) startOverlayExtras();
+if (view.editor) startVrInput();
 net.connect();
 
 // Test hook for automated UI checks.

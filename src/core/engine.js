@@ -143,6 +143,11 @@ class Engine extends EventEmitter {
         if (key.startsWith('vrc.param=')) needs.vrcParams.add(key.slice('vrc.param='.length));
       } else if (key === 'proc' || key.startsWith('proc=')) needs.process = true;
       else if (key.startsWith('vr.')) needs.vr = true;
+      else if (key.startsWith('vm.')) {
+        needs.vm = true;
+        if (key.startsWith('vm.param=')) needs.vmParams.add(key.slice('vm.param='.length));
+        else if (key.startsWith('vm.macro=')) needs.vmMacros.add(Number(key.slice('vm.macro='.length)));
+      }
       else if (key.startsWith('media.')) needs.media.add('any');
       else if (key.startsWith('pear.')) needs.pear = true;
       else if (key.startsWith('spotify.')) {
@@ -322,6 +327,11 @@ class Engine extends EventEmitter {
       twitchApi: (fn) => this.providers.twitchCall(fn),
       pearApi: (fn) => this.providers.pearCall(fn),
       spotifyLike: (mode) => this.providers.spotifyLike(mode),
+      vrControl: (op, args) => this.providers.vrControl(op, args),
+      vm: (op, args) => this.providers.vmCall(op, args),
+      nowPlaying: () => this.providers.nowPlaying(),
+      patchSettings: (fn) => this.patchSettings(fn),
+      oscTo: (host, port, address, args) => this.providers.osc.send(host, port, address, args),
       refreshTwitch: () => this.providers.refreshTwitch(),
       mediaControl: (app, cmd, pos) => this.providers.mediaControl(app, cmd, pos),
     };

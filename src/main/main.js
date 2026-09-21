@@ -7,6 +7,7 @@ const { execFileSync } = require('child_process');
 const { createApp } = require('../core');
 const { makeIconPng } = require('./icon');
 const { migrateOldData } = require('./migrate');
+const { OverlayManager } = require('./overlay');
 
 // A VR overlay app captures this window. Chromium normally stops painting windows that are
 // hidden behind others or minimized, which would freeze the picture inside VR.
@@ -21,6 +22,7 @@ const SMOKE = process.argv.includes('--smoke');
 if (process.env.VRMD_DATA_DIR) app.setPath('userData', path.join(process.env.VRMD_DATA_DIR, 'electron-profile'));
 
 let core = null;
+let overlay = null; // the SteamVR overlay (off until switched on in Settings)
 let win = null;
 let tray = null;
 let browserUrl = '';
@@ -164,6 +166,10 @@ function toggleEditing() {
   core.engine.setEditing(!core.engine.editing);
 }
 
+function toggleOverlayHidden() {
+  core.engine.patchSettings((s) => { s.overlay.hidden = !s.overlay.hidden; });
+}
+
 function toggleCleanView() {
   core.engine.patchSettings((s) => { s.window.cleanView = !s.window.cleanView; });
 }
@@ -213,6 +219,15 @@ function registerHotkeys(list) {
       failed.push(clean);
     }
   }
+  const ovKey = core && core.engine.config ? core.engine.config.settings.overlay.hotkey : '';
+  if (ovKey && !taken.has(ovKey.toLowerCase())) {
+    taken.add(ovKey.toLowerCase());
+    try {
+      if (!globalShortcut.register(ovKey, toggleOverlayHidden)) failed.push(ovKey);
+    } catch {
+      failed.push(ovKey);
+    }
+  }
   const unlock = core && core.engine.config ? core.engine.config.settings.lock.unlockHotkey : 'Ctrl+Alt+Shift+E';
   if (unlock && !taken.has(unlock.toLowerCase())) {
     try {
@@ -245,7 +260,7 @@ function saveBoundsNow() {
   core.engine.patchSettings((s) => { s.window.x = b.x; s.window.y = b.y; s.window.width = b.width; s.window.height = b.height; }, { broadcast: false });
 }
 
-function createWindow(url) {
+function createWindow(url, forceShow = false) {
   const settings = windowSettings();
   lastFrameless = isBare(settings);
   lastClean = settings.cleanView;
@@ -275,7 +290,8 @@ function createWindow(url) {
   win.once('ready-to-show', async () => {
     await applyStyle(); // before the first show, so the taskbar button is right from the start
     win.setAlwaysOnTop(windowSettings().alwaysOnTop, 'floating');
-    win.show();
+    // "Start hidden": for people who only use the VR overlay. The window exists (the tray brings it up) but is not shown.
+    if (!forceShow && windowSettings().startHidden && tray && !SMOKE) testLog({ event: 'window-kept-hidden' }); else win.show();
     updateTray();
     testLog({ event: 'window-shown' });
     flushPendingAcks(); // a second launch that arrived while we were starting up
@@ -307,7 +323,7 @@ function recreateWindow() {
   recreating = true;
   win.destroy();
   recreating = false;
-  createWindow(browserUrl);
+  createWindow(browserUrl, true); // it is being rebuilt because you are changing its settings: keep it in front of you
 }
 
 // ---- tray ----
@@ -317,7 +333,10 @@ function updateTray() {
   const onTop = windowSettings().alwaysOnTop;
   tray.setContextMenu(Menu.buildFromTemplate([
     { label: 'Show / hide window', click: toggleWindow },
+    { label: 'Start with no window (VR only)', type: 'checkbox', checked: windowSettings().startHidden, click: (item) => core.engine.patchSettings((s) => { s.window.startHidden = item.checked; }) },
     { label: editing ? 'Lock editing' : 'Unlock editing', click: toggleEditing },
+    { label: 'Show in SteamVR (overlay)', type: 'checkbox', checked: core.engine.config.settings.overlay.enabled, click: (item) => core.engine.patchSettings((s) => { s.overlay.enabled = item.checked; }) },
+    { label: 'Hide / show the overlay', enabled: core.engine.config.settings.overlay.enabled, click: toggleOverlayHidden },
     { label: 'Buttons only (see-through)', type: 'checkbox', checked: windowSettings().cleanView, click: toggleCleanView },
     { label: 'Keep window on top', type: 'checkbox', checked: onTop, click: (item) => core.engine.patchSettings((s) => { s.window.alwaysOnTop = item.checked; }) },
     { type: 'separator' },
@@ -442,6 +461,8 @@ if (!gotLock) {
           setFocusable: (on) => applyFocusable(Boolean(on)),
           windowControl,
           setWindowBounds,
+          overlayCommand: async (name, args) => { if (!overlay) throw new Error('The overlay is not available'); return overlay.command(name, args); },
+          overlayInfo: () => (overlay ? overlay.info() : { state: 'off' }),
           openExternal: (url) => { shell.openExternal(url); return true; },
           // Windows encrypts these with your own account, so a copied file is useless elsewhere.
           secretBox: {
@@ -455,6 +476,9 @@ if (!gotLock) {
       browserUrl = url;
       core.engine.on('edit', updateTray);
       core.engine.on('config', applyWindowSettings);
+      overlay = new OverlayManager({ core, url, buildDir: path.join(dataDir, 'helper'), dataDir, BrowserWindow });
+      core.engine.on('config', () => { overlay.sync(); updateTray(); });
+      overlay.sync();
       createTray();
       createWindow(url);
       if (SMOKE) {
@@ -469,6 +493,7 @@ if (!gotLock) {
   app.on('before-quit', () => { quitting = true; });
   app.on('will-quit', () => {
     globalShortcut.unregisterAll();
+    if (overlay) overlay.stop();
     if (core) core.stop();
   });
   // With "hide to tray" the app keeps running without a window; otherwise closing it quits.

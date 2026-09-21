@@ -80,3 +80,9 @@ test('schema: duplicate ids are made unique', () => {
   assert.notEqual(ids[0], ids[1]);
   assert.notEqual(config.pages[0].id, config.pages[1].id);
 });
+
+test('schema: "start with no window" is off by default, keeps true, and ignores junk', () => {
+  assert.equal(defaultConfig().settings.window.startHidden, false);
+  assert.equal(normalizeConfig({ settings: { window: { startHidden: true } } }).config.settings.window.startHidden, true);
+  assert.equal(normalizeConfig({ settings: { window: { startHidden: 'yes' } } }).config.settings.window.startHidden, false);
+});

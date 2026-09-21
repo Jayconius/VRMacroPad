@@ -86,6 +86,9 @@ class Helper extends EventEmitter {
   }
 
   call(op, args = {}, timeoutMs = 8000) {
+    // "id" and "op" belong to the request itself. An argument with one of those names (a device "id", say) used to replace the
+    // request number, so the helper's answer could never be matched and every such call "timed out" after 8 s although it had worked.
+    if ('id' in args || 'op' in args) return Promise.reject(new Error('Helper arguments cannot be named "id" or "op"'));
     if (!this.proc) this.start();
     if (!this.proc) return Promise.reject(new Error(this.error || 'Windows helper is not running'));
     const id = this.nextId++;
@@ -95,7 +98,7 @@ class Helper extends EventEmitter {
         reject(new Error(`Helper timed out on ${op}`));
       }, timeoutMs);
       this.pending.set(id, { resolve, reject, timer });
-      this.proc.stdin.write(`${JSON.stringify({ id, op, ...args })}\n`);
+      this.proc.stdin.write(`${JSON.stringify({ ...args, id, op })}\n`);
     });
   }
 

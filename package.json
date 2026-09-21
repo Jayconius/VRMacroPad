@@ -1,8 +1,8 @@
 {
   "name": "vr-macro-pad",
   "productName": "VR Macro Pad",
-  "version": "1.0.0",
-  "description": "Colored push-button macros you can pin in VR (via OVR Toolkit, XSOverlay, Desktop+) or use on the desktop.",
+  "version": "2.0.0",
+  "description": "Colored push-button macros and live mini screens, as a native SteamVR overlay or a desktop window. Voicemeeter, OBS, VRChat, Twitch, Spotify and more.",
   "main": "src/main/main.js",
   "scripts": {
     "start": "electron .",
@@ -11,6 +11,7 @@
     "smoke": "node scripts/smoke.js",
     "test:single": "node scripts/single-instance-test.js",
     "test:clean": "node scripts/clean-view-test.js",
+    "test:overlay": "electron scripts/overlay-render-test.js",
     "test": "node --test --test-timeout=60000 \"test/*.test.js\"",
     "make:icon": "node scripts/make-icon.js",
     "dist": "node scripts/make-icon.js && electron-builder --win portable nsis --x64",

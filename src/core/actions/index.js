@@ -1,6 +1,6 @@
 // The action catalog. Each entry is self-describing (params drive the UI form),
 // so adding a new action means adding one object to one of these files.
-const groups = [require('./audio'), require('./system'), require('./media'), require('./obs'), require('./vrchat'), require('./twitch'), require('./pear'), require('./spotify')];
+const groups = [require('./audio'), require('./system'), require('./media'), require('./obs'), require('./vrchat'), require('./steamvr'), require('./voicemeeter'), require('./twitch'), require('./pear'), require('./spotify')];
 const { widgetCatalog } = require('../widgets');
 
 const defs = new Map();
@@ -24,15 +24,27 @@ const STATE_KEYS = [
   { key: 'obs.inputMuted', label: 'OBS source is muted…', group: 'OBS', arg: 'obs.inputs' },
   { key: 'vrc.MuteSelf', label: 'VRChat mic is muted', group: 'VRChat' },
   { key: 'vrc.param', label: 'VRChat avatar parameter is on…', group: 'VRChat', arg: 'text' },
+  { key: 'vrc.VRMode', label: 'You are playing VRChat in VR', group: 'VRChat' },
+  { key: 'vrc.AFK', label: 'You are AFK in VRChat', group: 'VRChat' },
+  { key: 'vrc.Seated', label: 'You are seated in VRChat', group: 'VRChat' },
+  { key: 'vrc.Earmuffs', label: 'VRChat earmuffs are on', group: 'VRChat' },
+  { key: 'vrc.InStation', label: 'You are in a VRChat station (chair)', group: 'VRChat' },
   { key: 'proc', label: 'App is running…', group: 'System', arg: 'processes' },
   { key: 'media.playing', label: 'Music / video is playing', group: 'Media' },
   { key: 'vr.connected', label: 'SteamVR is running', group: 'SteamVR' },
+  { key: 'vr.dimmed', label: 'The view is dimmed', group: 'SteamVR' },
+  { key: 'vr.motionSmoothing', label: 'SteamVR motion smoothing is on', group: 'SteamVR' },
+  { key: 'vr.perfGraph', label: 'SteamVR performance graph is showing', group: 'SteamVR' },
+  { key: 'vr.boundsForced', label: 'Play-area bounds are kept visible', group: 'SteamVR' },
   { key: 'vr.lowBattery', label: 'A headset / controller / tracker battery is low', group: 'SteamVR' },
   { key: 'vr.charging', label: 'A headset / controller / tracker is charging', group: 'SteamVR' },
   { key: 'vr.hmdWorn', label: 'The headset is on your head', group: 'SteamVR' },
   { key: 'vr.trackingLost', label: 'A device lost tracking', group: 'SteamVR' },
   { key: 'vr.dropped', label: 'A device you used before is off or dropped out', group: 'SteamVR' },
   { key: 'vr.device', label: 'This device is connected…', group: 'SteamVR', arg: 'vr.devices' },
+  { key: 'vm.connected', label: 'Voicemeeter is running', group: 'Voicemeeter' },
+  { key: 'vm.param', label: 'Voicemeeter switch is on… (like Strip[0].Mute)', group: 'Voicemeeter', arg: 'text' },
+  { key: 'vm.macro', label: 'Voicemeeter macro button is on… (number)', group: 'Voicemeeter', arg: 'text' },
   { key: 'spotify.playing', label: 'Spotify is playing', group: 'Spotify' },
   { key: 'spotify.liked', label: 'The Spotify song playing is liked', group: 'Spotify' },
   { key: 'spotify.shuffle', label: 'Spotify shuffle is on', group: 'Spotify' },
