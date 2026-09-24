@@ -40,7 +40,7 @@ The biggest change is under the hood, and it opens the app up. OBS, Twitch, VRCh
 
 ### 🔔 Discord Notifications
 * Two mini screens: **Last Discord notification** (who last messaged you) and **Recent Discord notifications** (a running list), plus a **Clear** button.
-* **Filters** to ignore DMs, @everyone, @you or server events.
+* **Filters** to ignore DMs, `@everyone`, `@you` or server events.
 * Buttons can **light up** when a new message arrives, and it works with triggers.
 * It reads Windows toast notifications locally, so it needs no Discord login, bot or token.
 

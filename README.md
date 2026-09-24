@@ -40,7 +40,7 @@ It is a **native SteamVR overlay**: grab it, move it, resize it, snap it to your
 
 * 🧩 **A real plugin system.** A plugin is a folder with a few small JavaScript files: no build step, no touching the app. Drop it in, restart, and it has its own settings card, actions, mini screens, sign-in and connection status. Start with the step-by-step tutorial: **[Build your own plugin](docs/BUILD-A-PLUGIN.md)**.
 * 💬 **Discord** (new): post "I'm live" messages, cards and screenshots through a webhook, share a new Steam screenshot or your last VRChat photo, and press your Discord mute / deafen / push-to-talk shortcuts.
-* 🔔 **Discord Notifications** (new): mini screens that show who last messaged you, with filters for DMs, @everyone, @you and server events, and buttons that light up on a new message.
+* 🔔 **Discord Notifications** (new): mini screens that show who last messaged you, with filters for DMs, `@everyone`, `@you` and server events, and buttons that light up on a new message.
 * 🟢 **Kick** (new): chat, title and category, ad breaks and timeouts, live status and viewers, through Kick's official API. Press **Connect** and log in on Kick.
 * 🤖 **Streamer.bot** (new): run your Streamer.bot actions from a button (emote-only, slow mode, clear chat, anything you built), by name and grouped like in Streamer.bot itself. It uses Streamer.bot's normal WebSocket server, so it works with the default settings and no password.
 * ▶️ **YouTube** (new): live chat, go live and end stream, ad breaks, title, description and category, public / unlisted / private, plus live-status and channel-number mini screens. See the note below about signing in.
