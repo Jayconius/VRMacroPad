@@ -1,29 +1,41 @@
 // Settings, page settings and the info / status dialog.
 import { h, clear, clone, fmtTime, uid } from './util.js';
-import { state, currentPage, subscribe } from './state.js';
+import { state, currentPage, subscribe, pluginStatus, pluginDot } from './state.js';
 import { openModal, confirmDialog, toast } from './modal.js';
 import { saveConfig, setActivePage } from './commands.js';
 import * as net from './net.js';
-import { field, textInput, selectInput, checkbox, hotkeyField, optionsField, staticMultiField } from './forms.js';
+import { openUpdateDialog, checkNow } from './update-dialog.js';
+import { field, textInput, selectInput, checkbox, hotkeyField, optionsField, staticMultiField, buildParamForm } from './forms.js';
 
 const Grid = window.Grid;
 
 const statusText = {
   off: 'Not in use', starting: 'Starting…', ok: 'Running', error: 'Problem', connecting: 'Connecting…',
   connected: 'Connected', 'auth-failed': 'Wrong password', listening: 'Listening',
-  'needs-auth': 'Not connected', authorizing: 'Waiting for you to approve it on Twitch…',
+  'needs-auth': 'Not connected', authorizing: 'Waiting for you to approve it…',
   'awaiting-approval': 'Waiting for you to click Allow in Pear…', denied: 'Denied in Pear', 'not-running': "Can't reach Pear",
+  disabled: 'Disabled',
 };
 
 function statusRow(label, status, detail) {
   return h('div', { class: 'status-row' }, h('span', { class: `dot ${status}` }), h('strong', null, label), h('span', { class: 'muted' }, statusText[status] || status), detail ? h('span', { class: 'field-help' }, detail) : null);
 }
 
+// A plugin's status object carries whatever extra fields it wants (user, lastHeard, simulated...); this is
+// the one place that turns those into the one line of detail text shown next to its dot, shared by the
+// Plugins tab and the Info dialog's Status tab.
+function pluginDetail(id, s) {
+  if (id === 'vrchat') return s.error || (s.lastHeard ? `Last message ${fmtTime(s.lastHeard)}` : '');
+  if (id === 'steamvr') return s.simulated ? 'Showing a SIMULATED rig (fake signal file)' : s.error;
+  if (s.status === 'connected' && s.user) return `Signed in as ${s.user.name}`;
+  return s.error || '';
+}
+
 // ---- page settings ----
 export function openPageDialog(pageId, { isNew = false } = {}) {
   const cfg = state.config;
   const existing = cfg.pages.find((p) => p.id === pageId);
-  const draft = existing ? clone(existing) : { id: uid('p'), name: `Page ${cfg.pages.length + 1}`, cols: 8, rows: 4, autoShowProcess: '', buttons: [] };
+  const draft = existing ? clone(existing) : { id: uid('p'), name: `Page ${cfg.pages.length + 1}`, cols: 8, rows: 4, fit: true, autoShowProcess: '', buttons: [] };
   const errorEl = h('div', { class: 'field-error', hidden: true });
   const min = Grid.minPageSize(draft);
 
@@ -31,7 +43,7 @@ export function openPageDialog(pageId, { isNew = false } = {}) {
     const ok = await saveConfig((c) => {
       const idx = c.pages.findIndex((p) => p.id === draft.id);
       const next = { ...draft, name: draft.name.trim() || 'Page' };
-      if (idx >= 0) c.pages[idx] = { ...c.pages[idx], name: next.name, cols: next.cols, rows: next.rows, autoShowProcess: next.autoShowProcess };
+      if (idx >= 0) c.pages[idx] = { ...c.pages[idx], name: next.name, cols: next.cols, rows: next.rows, fit: Boolean(next.fit), autoShowProcess: next.autoShowProcess };
       else c.pages.push(next);
     });
     if (ok) { modal.close(); if (isNew) setActivePage(draft.id); }
@@ -58,9 +70,11 @@ export function openPageDialog(pageId, { isNew = false } = {}) {
     body: [
       field('Name', textInput(draft.name, (v) => { draft.name = v; })),
       h('div', { class: 'row gap' },
-        field('Columns', textInput(draft.cols, (v) => { draft.cols = Math.max(min.cols, Math.min(24, Number(v) || 1)); }, { type: 'number', min: min.cols, max: 24 })),
-        field('Rows', textInput(draft.rows, (v) => { draft.rows = Math.max(min.rows, Math.min(16, Number(v) || 1)); }, { type: 'number', min: min.rows, max: 16 }))),
+        field('Columns', textInput(draft.cols, (v) => { draft.cols = Math.max(min.cols, Math.min(100, Number(v) || 1)); }, { type: 'number', min: min.cols, max: 100 })),
+        field('Rows', textInput(draft.rows, (v) => { draft.rows = Math.max(min.rows, Math.min(100, Number(v) || 1)); }, { type: 'number', min: min.rows, max: 100 }))),
       h('p', { class: 'field-help' }, existing ? `Buttons already reach column ${min.cols}, row ${min.rows}, so the page can't shrink below that.` : 'More columns and rows mean smaller buttons when the window is small.'),
+      checkbox('Fit the whole page on screen', draft.fit, (v) => { draft.fit = v; }),
+      h('p', { class: 'field-help' }, 'Shrinks the buttons so every row and column is always visible, with no scrolling. Handy for very big grids. On by default. Turn it off to keep buttons a comfortable size on a very big grid (the page scrolls instead).'),
       field('Show this page when an app starts', optionsField({ kind: 'processes', value: draft.autoShowProcess, allowCustom: true, placeholder: 'e.g. vrchat.exe (optional)', onChange: (v) => { draft.autoShowProcess = v.toLowerCase(); } }),
         { help: 'Handy for a VRChat page that appears when VRChat launches.' }),
       errorEl,
@@ -76,104 +90,99 @@ export function openPageDialog(pageId, { isNew = false } = {}) {
   });
 }
 
-// The live part of the Twitch sign-in: status, the code to type on twitch.tv, connect/disconnect.
-// It redraws itself as the core reports progress, while the Client ID field stays untouched.
-function twitchPanel(saveSettings) {
-  const box = h('div', { class: 'stack' });
-  const result = h('div', { class: 'muted small' });
-  const draw = () => {
-    clear(box);
-    const tw = state.status.twitch || { status: 'off' };
-    box.append(statusRow('Twitch', tw.status, tw.status === 'connected' && tw.user ? `Signed in as ${tw.user.name}` : tw.error));
-    if (tw.status === 'authorizing' && tw.pending) {
-      box.append(h('div', { class: 'code-box' },
-        h('div', { class: 'muted small' }, 'Go to Twitch and enter this code:'),
-        h('div', { class: 'code' }, tw.pending.userCode),
-        h('div', { class: 'row gap' },
-          h('button', { class: 'btn-primary', onclick: () => net.request('open.external', { url: tw.pending.verificationUri }).then((ok) => { if (!ok) window.open(tw.pending.verificationUri, '_blank', 'noopener'); }, () => window.open(tw.pending.verificationUri, '_blank', 'noopener')) }, 'Open Twitch to approve'),
-          h('button', { class: 'btn-secondary', onclick: () => net.request('twitch.disconnect').catch((e) => toast(e.message, 'error')) }, 'Cancel')),
-        h('p', { class: 'field-help' }, 'This page updates by itself once you approve.')));
-    } else if (tw.status === 'connected') {
-      box.append(h('div', { class: 'row gap' },
-        h('button', { class: 'btn-secondary', onclick: async () => {
-          result.textContent = 'Checking…';
-          try {
-            const c = await net.request('twitch.check');
-            result.textContent = c.missing.length ? `Signed in as ${c.login}. Missing permissions: ${c.missing.join(', ')}. Disconnect and connect again.` : `Signed in as ${c.login}. All permissions granted.`;
-          } catch (err) { result.textContent = err.message; }
-        } }, 'Check permissions'),
-        h('button', { class: 'btn-secondary', onclick: () => net.request('twitch.disconnect').catch((e) => toast(e.message, 'error')) }, 'Disconnect')), result);
-    } else {
-      box.append(h('button', { class: 'btn-primary', onclick: async () => {
-        if (!await saveSettings(false)) return;
-        try {
-          const flow = await net.request('twitch.connect');
-          // Open Twitch's approval page straight away (its link already contains the code), so signing in is just "click Authorize".
-          const fallback = () => window.open(flow.verificationUri, '_blank', 'noopener');
-          net.request('open.external', { url: flow.verificationUri }).then((ok) => { if (!ok) fallback(); }, fallback);
-        } catch (err) { toast(err.message, 'error'); }
-      } }, state.app.twitchBuiltIn ? 'Connect Twitch' : 'Save and connect to Twitch'));
-    }
-    if (tw.status !== 'off') box.append(h('p', { class: 'field-help' }, tw.encrypted ? 'Your Twitch login is stored encrypted with your Windows account.' : 'Your Twitch login is stored in your data folder (not encrypted in this mode).'));
-  };
-  const off = subscribe(() => { if (box.isConnected) draw(); else off(); });
-  draw();
-  return box;
+// A connect/disconnect/sign-in flow for ANY plugin, built-in or not — reads only what the manifest and
+// status() declare (connections[].flow, clientMethods, pending/redirectUri/hasToken/encrypted on status).
+// Nothing here is keyed by plugin id: OBS, Twitch, your own plugin, all go through the same function.
+function openExternal(url) {
+  const fallback = () => window.open(url, '_blank', 'noopener');
+  net.request('open.external', { url }).then((ok) => { if (!ok) fallback(); }, fallback);
 }
-
-// The live part of the Pear sign-in: status plus Connect / Disconnect.
-function pearPanel(saveSettings) {
-  const box = h('div', { class: 'stack' });
-  const draw = () => {
-    clear(box);
-    const p = state.status.pear || { status: 'off' };
-    const detail = p.status === 'connected' ? 'Live from Pear' : p.error || ({ 'awaiting-approval': 'A prompt is showing in Pear. Click Allow.', denied: 'Press Connect again and click Allow.', 'not-running': 'Is Pear open with its API Server plugin on?', 'needs-auth': 'Press Connect below.' }[p.status] || '');
-    box.append(statusRow('YouTube Music (Pear)', p.status, detail));
-    box.append(h('div', { class: 'row gap' },
-      p.hasToken || p.status === 'connected'
-        ? h('button', { class: 'btn-secondary', onclick: () => net.request('pear.disconnect').catch((e) => toast(e.message, 'error')) }, 'Disconnect')
-        : h('button', { class: 'btn-primary', disabled: p.status === 'awaiting-approval', onclick: async () => {
-          if (!await saveSettings(false)) return;
-          try { await net.request('pear.connect'); } catch (err) { toast(err.message, 'error'); }
-        } }, 'Connect Pear')));
-  };
-  const off = subscribe(() => { if (box.isConnected) draw(); else off(); });
-  draw();
-  return box;
+// A plugin's step-by-step set-up guide (manifest.guide) in a dialog: numbered steps, each with optional link buttons that open
+// in the normal browser and an optional "Copy" button for text you have to paste somewhere.
+function openGuide(m) {
+  const g = m.guide;
+  const copyButton = (c) => h('button', { class: 'btn-secondary small', onclick: async () => {
+    try { await navigator.clipboard.writeText(c.text); toast('Copied.', 'info'); } catch { toast('Could not copy. Select the text in the step and copy it by hand.', 'warn'); }
+  } }, c.label);
+  const modal = openModal({
+    title: g.title || `${m.name}: set-up guide`,
+    wide: true,
+    body: [
+      g.intro ? h('p', { class: 'field-help guide-text' }, g.intro) : null,
+      h('ol', { class: 'guide-steps' }, g.steps.map((st, i) => h('li', { class: 'guide-step' },
+        h('div', { class: 'guide-num' }, String(i + 1)),
+        h('div', { class: 'guide-body' },
+          st.title ? h('strong', null, st.title) : null,
+          st.text ? h('p', { class: 'guide-text' }, st.text) : null,
+          st.links.length || st.copy ? h('div', { class: 'row gap wrap' },
+            st.links.map((l) => h('button', { class: 'btn-secondary small', onclick: () => openExternal(l.url) }, `${l.label} ↗`)),
+            st.copy ? copyButton(st.copy) : null) : null)))),
+      g.outro ? h('p', { class: 'field-help guide-text' }, g.outro) : null,
+    ],
+    footer: [h('span', { class: 'spacer' }), h('button', { class: 'btn-primary', onclick: () => modal.close() }, 'Close')],
+  });
 }
-
-// Spotify (only for the Like button): status plus Connect / Disconnect.
-function spotifyPanel(saveSettings) {
-  const box = h('div', { class: 'stack' });
-  const openIt = (url) => {
-    const fallback = () => window.open(url, '_blank', 'noopener');
-    net.request('open.external', { url }).then((ok) => { if (!ok) fallback(); }, fallback);
-  };
-  const draw = () => {
-    clear(box);
-    const sp = state.status.spotify || { status: 'off' };
-    box.append(statusRow('Spotify (Like)', sp.status, sp.status === 'connected' && sp.user ? `Signed in as ${sp.user.name}` : sp.error));
-    if (sp.status === 'authorizing') {
-      box.append(h('div', { class: 'code-box' },
-        h('div', { class: 'muted small' }, 'Waiting for you to approve on Spotify…'),
-        h('div', { class: 'row gap' }, h('button', { class: 'btn-secondary', onclick: () => net.request('spotify.disconnect').catch((e) => toast(e.message, 'error')) }, 'Cancel')),
-        h('p', { class: 'field-help' }, 'The approval page opened in your browser. This updates by itself once you click Agree.')));
-    } else if (sp.status === 'connected') {
-      box.append(h('div', { class: 'row gap' }, h('button', { class: 'btn-secondary', onclick: () => net.request('spotify.disconnect').catch((e) => toast(e.message, 'error')) }, 'Disconnect')));
-    } else {
-      box.append(h('button', { class: 'btn-primary', onclick: async () => {
-        if (!await saveSettings(false)) return;
-        try {
-          const flow = await net.request('spotify.connect');
-          openIt(flow.url);
-        } catch (err) { toast(err.message, 'error'); }
-      } }, 'Connect Spotify'));
-    }
-    if (sp.status !== 'off') box.append(h('p', { class: 'field-help' }, sp.encrypted ? 'Your Spotify login is stored encrypted with your Windows account.' : 'Your Spotify login is stored in your data folder (not encrypted in this mode).'));
-  };
-  const off = subscribe(() => { if (box.isConnected) draw(); else off(); });
-  draw();
-  return box;
+function callMethod(id, method) {
+  return net.request('plugin.call', { plugin: id, method });
+}
+function describeMethodResult(r) {
+  if (r == null) return 'Done.';
+  if (typeof r === 'string') return r;
+  if (Array.isArray(r.missing)) return r.missing.length ? `Missing permissions: ${r.missing.join(', ')}.` : 'All permissions granted.';
+  try { return JSON.stringify(r); } catch { return 'Done.'; }
+}
+function connectionArea(m, st, saveSettings, bag) {
+  const nodes = [];
+  const conn = m.connections && m.connections[0];
+  const methods = m.clientMethods || [];
+  if (conn && methods.includes('connect') && bag) {
+    nodes.push(checkbox('Auto-connect on startup', bag.autoConnect === true, (v) => { bag.autoConnect = v; }));
+    nodes.push(h('p', { class: 'field-help' }, `Reconnects automatically when the app starts, without waiting for a button to need it — and again as soon as ${m.name} becomes reachable, if it isn't yet. Signing in for the first time always needs you to press Connect.`));
+  }
+  if (conn && conn.flow === 'redirect' && st.redirectUri) {
+    nodes.push(field(`Redirect URI to add in the ${m.name} dashboard`, (() => { const i = h('input', { type: 'text', readonly: true, value: st.redirectUri }); i.addEventListener('focus', () => i.select()); return i; })()));
+  }
+  const statusValue = st.state || st.status;
+  if (st.note) nodes.push(h('p', { class: 'field-help status-note' }, st.note));
+  if (conn && st.pending && st.pending.userCode) {
+    nodes.push(h('div', { class: 'code-box' },
+      h('div', { class: 'muted small' }, `Go to ${m.name} and enter this code:`),
+      h('div', { class: 'code' }, st.pending.userCode),
+      h('div', { class: 'row gap' },
+        h('button', { class: 'btn-primary', onclick: () => openExternal(st.pending.verificationUri) }, `Open ${m.name} to approve`),
+        methods.includes('disconnect') ? h('button', { class: 'btn-secondary', onclick: () => callMethod(m.id, 'disconnect').catch((e) => toast(e.message, 'error')) }, 'Cancel') : null),
+      h('p', { class: 'field-help' }, 'This page updates by itself once you approve.')));
+  } else if (conn && statusValue === 'authorizing') {
+    nodes.push(h('div', { class: 'code-box' },
+      h('div', { class: 'muted small' }, `Waiting for you to approve on ${m.name}…`),
+      methods.includes('disconnect') ? h('div', { class: 'row gap' }, h('button', { class: 'btn-secondary', onclick: () => callMethod(m.id, 'disconnect').catch((e) => toast(e.message, 'error')) }, 'Cancel')) : null,
+      h('p', { class: 'field-help' }, 'This page updates by itself once you approve.')));
+  } else if (conn && (statusValue === 'connected' || statusValue === 'ok' || st.hasToken)) {
+    const extra = methods.filter((x) => x !== 'connect' && x !== 'disconnect');
+    const result = h('span', { class: 'muted small' });
+    nodes.push(h('div', { class: 'row gap' },
+      ...extra.map((method) => h('button', { class: 'btn-secondary', onclick: async () => {
+        result.textContent = 'Working…';
+        try { result.textContent = describeMethodResult(await callMethod(m.id, method)); } catch (err) { result.textContent = err.message; }
+      } }, method.charAt(0).toUpperCase() + method.slice(1))),
+      methods.includes('disconnect') ? h('button', { class: 'btn-secondary', onclick: () => callMethod(m.id, 'disconnect').catch((e) => toast(e.message, 'error')) }, 'Disconnect') : null,
+      result));
+  } else if (conn && methods.includes('connect')) {
+    nodes.push(h('button', { class: 'btn-primary', disabled: statusValue === 'awaiting-approval', onclick: async () => {
+      if (!await saveSettings(false)) return;
+      try {
+        const r = await callMethod(m.id, 'connect');
+        const url = r && (r.verificationUri || r.url);
+        if (url) openExternal(url);
+      } catch (err) { toast(err.message, 'error'); }
+    } }, `Connect ${conn.label || m.name}`));
+  }
+  const hint = (m.statusHints && m.statusHints[statusValue]) || (statusValue === 'connected' && st.user ? `Signed in as ${st.user.name}` : pluginDetail(m.id, st));
+  nodes.push(statusRow(m.name, pluginDot(st), hint));
+  if (st.encrypted !== undefined && statusValue !== 'off') {
+    nodes.push(h('p', { class: 'field-help' }, st.encrypted ? `Your ${m.name} login is stored encrypted with your Windows account.` : `Your ${m.name} login is stored in your data folder (not encrypted in this mode).`));
+  }
+  return nodes;
 }
 
 // ---- settings ----
@@ -186,7 +195,7 @@ export function openSettings() {
 
   const renderTabs = () => {
     clear(tabsEl);
-    for (const [id, label] of [['general', 'General'], ['editing', 'Editing lock'], ['window', 'Window'], ['connections', 'Connections'], ['overlay', 'VR overlay'], ['data', 'Backup & data'], ['about', 'About']]) {
+    for (const [id, label] of [['general', 'General'], ['editing', 'Editing lock'], ['window', 'Window'], ['connections', 'Plugins'], ['overlay', 'VR overlay'], ['data', 'Backup & data'], ['about', 'About']]) {
       tabsEl.append(h('button', { class: `tab${tab === id ? ' on' : ''}`, onclick: () => { tab = id; renderTabs(); renderContent(); } }, label));
     }
   };
@@ -195,7 +204,33 @@ export function openSettings() {
     field('Theme', selectInput([['dark', 'Dark'], ['light', 'Light']], draft.theme, (v) => { draft.theme = v; })),
     field('Accent color', (() => { const i = h('input', { type: 'color', value: draft.accent }); i.addEventListener('input', () => { draft.accent = i.value; }); return i; })()),
     checkbox('Play button animations (pulse, flash, glow...)', draft.animations !== false, (v) => { draft.animations = v; }),
-    field(`Space between buttons`, textInput(draft.gap, (v) => { draft.gap = Math.max(0, Math.min(40, Number(v) || 0)); }, { type: 'number', min: 0, max: 40 }), { help: 'In pixels.' }));
+    field(`Space between buttons`, textInput(draft.gap, (v) => { draft.gap = Math.max(0, Math.min(40, Number(v) || 0)); }, { type: 'number', min: 0, max: 40 }), { help: 'In pixels.' }),
+    h('hr'),
+    updatesSection());
+
+  // ---- updates: off until you turn it on ----
+  function updatesSection() {
+    const line = h('span', { class: 'muted small' });
+    const paint = () => {
+      const u = state.update || {};
+      if (u.status === 'checking') line.textContent = 'Checking…';
+      else if (u.status === 'error') line.textContent = u.error || 'The check failed.';
+      else if (['available', 'downloading', 'ready'].includes(u.status) && u.latest) line.textContent = `Version ${u.latest} is available.`;
+      else if (u.status === 'uptodate' && u.checkedAt) line.textContent = u.note || (u.latest ? `You are up to date (${u.current}).` : 'Nothing newer found.');
+      else line.textContent = '';
+    };
+    paint();
+    const off = subscribe(() => { if (line.isConnected) paint(); else off(); });
+    const u0 = state.update || {};
+    const showBtn = () => ['available', 'downloading', 'ready'].includes((state.update || {}).status) ? openUpdateDialog() : null;
+    return h('div', { class: 'stack' },
+      checkbox('Check for updates', Boolean(draft.updates.check), (v) => { draft.updates.check = v; }),
+      h('p', { class: 'field-help' }, 'Off by default. When this is on, the app asks GitHub once after it starts, and again every few hours, whether there is a newer version, and pops up a box with a link, a Download button and a Skip button if there is. It only asks: nothing is downloaded until you press Download, and nothing about you is sent. Save to apply.'),
+      h('div', { class: 'row gap' },
+        h('button', { class: 'btn-secondary small', onclick: () => { checkNow().catch((err) => { line.textContent = err.message; }); } }, 'Check now'),
+        ['available', 'downloading', 'ready'].includes(u0.status) ? h('button', { class: 'btn-secondary small', onclick: showBtn }, 'Show the update') : null,
+        line));
+  }
 
   const editing = () => h('div', { class: 'stack' },
     field('How editing is unlocked', selectInput([['hold', 'Hold the lock button'], ['hotkey', 'Only with a hotkey or the tray icon (safest in VR)']], draft.lock.unlockMethod, (v) => { draft.lock.unlockMethod = v; renderContent(); }),
@@ -220,64 +255,97 @@ export function openSettings() {
     checkbox('Keep the window on top of other windows', draft.window.alwaysOnTop, (v) => { draft.window.alwaysOnTop = v; }),
     h('p', { class: 'field-help' }, 'Useful on the desktop. For VR you usually want the window visible (not minimized) so your overlay app can show it.'));
 
-  const connections = () => {
-    const st = state.status;
-    const obsTest = h('div', { class: 'muted small' });
-    return h('div', { class: 'stack' },
-      h('h3', null, 'OBS Studio'),
-      h('p', { class: 'field-help' }, 'In OBS: Tools → WebSocket Server Settings → enable it, then enter the same port and password here.'),
-      h('div', { class: 'row gap' },
-        field('Address', textInput(draft.obs.host, (v) => { draft.obs.host = v; })),
-        field('Port', textInput(draft.obs.port, (v) => { draft.obs.port = Number(v) || 4455; }, { type: 'number', min: 1, max: 65535 }))),
-      field('Password', textInput(draft.obs.password, (v) => { draft.obs.password = v; }, { type: 'password' }), { help: 'Stored in plain text in your config. Leave empty if OBS has no password.' }),
-      h('div', { class: 'row gap' }, h('button', { class: 'btn-secondary small', onclick: async () => {
-        obsTest.textContent = 'Saving and testing…';
-        if (!await saveSettings(false)) { obsTest.textContent = ''; return; }
-        try { const scenes = await net.request('options', { kind: 'obs.scenes' }); obsTest.textContent = `Connected. Found ${scenes.length} scene(s).`; } catch (err) { obsTest.textContent = err.message; }
-      } }, 'Save and test connection'), obsTest),
-      statusRow('OBS', st.obs || 'off', st.obsError),
-      h('hr'),
-      h('h3', null, 'VRChat (OSC)'),
-      h('p', { class: 'field-help' }, 'In VRChat: Action Menu → Options → OSC → Enabled. The default ports rarely need changing.'),
-      h('div', { class: 'row gap' },
-        field('Send to port', textInput(draft.osc.sendPort, (v) => { draft.osc.sendPort = Number(v) || 9000; }, { type: 'number', min: 1, max: 65535 })),
-        field('Listen on port', textInput(draft.osc.listenPort, (v) => { draft.osc.listenPort = Number(v) || 9001; }, { type: 'number', min: 1, max: 65535 }))),
-      checkbox('Listen for VRChat state (needed for the mic-mute color)', draft.osc.listen, (v) => { draft.osc.listen = v; }),
-      statusRow('VRChat OSC', st.vrc || 'off', st.vrcError),
-      h('hr'),
-      h('h3', null, 'Twitch'),
-      ...(state.app.twitchBuiltIn
-        ? [
-          h('p', { class: 'field-help' }, 'Press Connect, then approve access on twitch.tv with the short code shown. You stay in control: Twitch lists exactly what you are allowing, and you can revoke it any time in your Twitch settings.'),
-          twitchPanel(saveSettings),
-          h('details', { class: 'advanced' }, h('summary', null, 'Advanced: use my own Twitch app instead'),
-            h('p', { class: 'field-help' }, 'Only needed if you registered your own application at dev.twitch.tv/console (Client Type "Public", OAuth Redirect URL http://localhost). Leave empty to use the built-in one.'),
-            field('Client ID', textInput(draft.twitch.clientId, (v) => { draft.twitch.clientId = v.trim(); }, { placeholder: 'leave empty to use the built-in app' }))),
-        ]
-        : [
-          h('p', { class: 'field-help' }, 'Create a free app at dev.twitch.tv/console: Client Type "Public", OAuth Redirect URL http://localhost. Paste its Client ID here. You approve access once on twitch.tv with a short code; no secret is needed.'),
-          field('Client ID', textInput(draft.twitch.clientId, (v) => { draft.twitch.clientId = v.trim(); }, { placeholder: 'from the Twitch developer console' })),
-          twitchPanel(saveSettings),
-        ]),
-      field('Warn about an upcoming ad this many minutes ahead', textInput(draft.twitch.adWarnMinutes, (v) => { draft.twitch.adWarnMinutes = Math.max(1, Math.min(60, Number(v) || 5)); }, { type: 'number', min: 1, max: 60 }), { help: 'Used by the "ad break is coming up" trigger.' }),
-      h('hr'),
-      h('h3', null, 'YouTube Music (Pear Desktop)'),
-      h('p', { class: 'field-help' }, 'In Pear: Plugins → API Server → enable it (set the hostname to 127.0.0.1 so only this PC can reach it). Then press Connect and click Allow in the Pear window. Adds the album, like, shuffle, repeat and volume.'),
-      h('div', { class: 'row gap' },
-        field('Address', textInput(draft.pear.host, (v) => { draft.pear.host = v.trim(); })),
-        field('Port', textInput(draft.pear.port, (v) => { draft.pear.port = Number(v) || 26538; }, { type: 'number', min: 1, max: 65535 }))),
-      pearPanel(saveSettings),
-      h('hr'),
-      h('h3', null, 'Spotify (only needed for the Like button)'),
-      h('p', { class: 'field-help' }, 'Play, pause, skip, shuffle, repeat and seek for Spotify need no setup at all. Only "Like" does, because Windows has no like button. To set it up: at developer.spotify.com/dashboard create an app, add this exact Redirect URI, tick "Web API", and paste its Client ID here. Spotify currently only lets an app in development mode work while its owner has Premium, for up to 5 people you add under User Management.'),
-      field('Redirect URI to add in the Spotify dashboard', (() => { const i = h('input', { type: 'text', readonly: true, value: (state.status.spotify && state.status.spotify.redirectUri) || 'http://127.0.0.1:17422/callback' }); i.addEventListener('focus', () => i.select()); return i; })()),
-      field('Client ID', textInput(draft.spotify.clientId, (v) => { draft.spotify.clientId = v.trim(); }, { placeholder: 'from the Spotify developer dashboard' })),
-      spotifyPanel(saveSettings),
-      h('hr'),
-      h('h3', null, 'SteamVR'),
-      field('Low-battery warning (%)', textInput(draft.vr.lowBatteryPercent, (v) => { draft.vr.lowBatteryPercent = Math.max(1, Math.min(90, Number(v) || 15)); }, { type: 'number', min: 1, max: 90 }), { help: 'Used by the "battery is low" trigger and color. Needs SteamVR running.' }),
-      statusRow('SteamVR link', st.steamvr || 'off', st.steamvrSimulated ? 'Showing a SIMULATED rig (fake signal file). Close the simulator to go back to real SteamVR.' : st.steamvrError));
+  // ---- Plugins tab: every plugin — built-in or dropped into the plugins folder — is one card, built the
+  // same way from its manifest: icon, name, status dot, an Enabled toggle, its settings (settingsFields),
+  // rare shared-setting fields (coreFields, only VRChat's OSC ports use this), a "test connection" button
+  // (testOptionKind), and a full Connect/Disconnect/sign-in flow (connectionArea, above). No plugin id is
+  // ever checked here — a built-in's card looks the way it does only because of what its own manifest
+  // declares (instructions, statusHints, builtInAware...), the same declarations a third-party plugin has
+  // available to it. See docs/PLUGIN-GUIDE.md.
+  function corePath(path) {
+    const parts = path.split('.');
+    const key = parts.pop();
+    return [parts.reduce((o, k) => o[k], draft), key];
+  }
+  function coreField(f) {
+    const [obj, key] = corePath(f.path);
+    const onChange = (v) => { obj[key] = v; };
+    if (f.type === 'number') return field(f.label, textInput(obj[key], (v) => onChange(Math.max(f.min ?? -1e9, Math.min(f.max ?? 1e9, Number(v) || 0))), { type: 'number', min: f.min, max: f.max }), { help: f.help });
+    if (f.type === 'boolean') return checkbox(f.label, Boolean(obj[key]), onChange);
+    return field(f.label, textInput(obj[key], onChange), { help: f.help });
+  }
+  function settingField(m, f, st0) {
+    const bag = draft.plugins[m.id];
+    const onChange = (v) => { bag[f.key] = v; };
+    const placeholder = f.builtInAware && st0 && st0.hasBuiltIn ? 'leave empty to use the built-in one' : f.placeholder;
+    if (f.type === 'number') return field(f.label, textInput(bag[f.key], (v) => onChange(Math.max(f.min ?? -1e9, Math.min(f.max ?? 1e9, Number(v) || 0))), { type: 'number', min: f.min, max: f.max }), { help: f.help });
+    if (f.type === 'boolean') return checkbox(f.label, Boolean(bag[f.key]), onChange);
+    if (f.type === 'select' && f.options) return field(f.label, selectInput(f.options, bag[f.key], onChange), { help: f.help });
+    // The richer types (a recorded shortcut, several lines, a list the plugin fills in) are drawn by the same code the button editor uses.
+    if (['textarea', 'keys', 'multiselect'].includes(f.type) || (f.type === 'select' && f.optionsFrom)) return buildParamForm({ params: [f] }, bag, () => {});
+    return field(f.label, textInput(bag[f.key], onChange, { type: f.type === 'password' ? 'password' : 'text', placeholder }), { help: f.help });
+  }
+  function testConnectionButton(m) {
+    const result = h('div', { class: 'muted small' });
+    return h('div', { class: 'row gap' }, h('button', { class: 'btn-secondary small', onclick: async () => {
+      result.textContent = 'Saving and testing…';
+      if (!await saveSettings(false)) { result.textContent = ''; return; }
+      try { const list = await net.request('options', { kind: m.testOptionKind }); result.textContent = `Connected. Found ${list.length} result(s).`; } catch (err) { result.textContent = err.message; }
+    } }, 'Save and test connection'), result);
+  }
+
+  function pluginCard(m) {
+    const bag = draft.plugins[m.id];
+    const st0 = pluginStatus(m.id);
+    const enabledBox = h('input', { type: 'checkbox', checked: bag.enabled !== false });
+    enabledBox.addEventListener('change', () => { bag.enabled = enabledBox.checked; });
+    const help = m.instructions || '';
+    const normalFields = [];
+    const advancedFields = [];
+    // A field is tucked under "Advanced" when the plugin says so (advanced: true), or when it only matters if you are
+    // replacing the plugin's built-in app (builtInAware, while the plugin reports hasBuiltIn).
+    const builtInMode = Boolean(st0.hasBuiltIn) && (m.settingsFields || []).some((f) => f.builtInAware);
+    for (const f of m.settingsFields || []) (f.advanced || (f.builtInAware && st0.hasBuiltIn) ? advancedFields : normalFields).push(settingField(m, f, st0));
+    const summaryDot = h('span', { class: 'dot' });
+    // Only the tail (Connect/Disconnect, status row) needs to live-update as the server pushes status
+    // changes — everything else above it is built once, so the accordion's own open/closed state never
+    // resets under the user.
+    const tail = h('div', { class: 'stack tight' });
+    const draw = () => {
+      const st = pluginStatus(m.id);
+      summaryDot.className = `dot ${pluginDot(st)}`;
+      clear(tail);
+      for (const n of connectionArea(m, st, saveSettings, bag)) if (n) tail.append(n);
+    };
+    const off = subscribe(() => { if (summaryDot.isConnected) draw(); else off(); });
+    draw();
+    return h('details', { class: 'advanced plugin-card' },
+      h('summary', null, `${m.icon || '🔌'} ${m.name}`, summaryDot),
+      h('div', { class: 'stack' },
+        m.description ? h('p', { class: 'field-help' }, m.description) : null,
+        h('label', { class: 'check' }, enabledBox, 'Enabled'),
+        help ? h('p', { class: 'field-help plugin-instructions' }, help) : null,
+        m.guide ? h('div', { class: 'row gap' }, h('button', { class: 'btn-secondary', onclick: () => openGuide(m) }, m.guide.button || 'Instructions')) : null,
+        ...(m.coreFields || []).map(coreField),
+        ...normalFields,
+        advancedFields.length ? h('details', { class: 'advanced' }, h('summary', null, builtInMode ? `Advanced: use your own ${m.name} app instead` : (m.advancedLabel || 'Advanced')), ...advancedFields) : null,
+        m.testOptionKind ? testConnectionButton(m) : null,
+        tail));
+  }
+
+  // Plugins that could not be loaded (a typo in plugin.js, a duplicate id...) are listed first, with the reason
+  // and the folder, so a plugin that "doesn't show up" always explains itself.
+  const loadFailures = () => {
+    const bad = state.catalog.pluginErrors || [];
+    if (!bad.length) return null;
+    return h('div', { class: 'load-failures' },
+      h('strong', null, `${bad.length} plugin${bad.length === 1 ? '' : 's'} could not be loaded`),
+      h('p', { class: 'field-help' }, 'Fix the problem, then restart the app. Everything else keeps working.'),
+      ...bad.map((e) => h('div', { class: 'load-failure' }, h('div', null, h('strong', null, e.name)), h('div', { class: 'small' }, e.error), h('div', { class: 'muted small' }, e.dir))));
   };
+  const connections = () => h('div', { class: 'stack' },
+    loadFailures(),
+    (state.catalog.plugins || []).map((m) => pluginCard(m)));
 
   // ---- the SteamVR overlay ----
   const overlayTab = () => {
@@ -428,16 +496,14 @@ export function openInfo() {
     clear(content);
     const st = state.status;
     if (tab === 'status') {
-      content.append(h('div', { class: 'stack' },
-        statusRow('Windows helper (audio & keys)', st.helper || 'off', st.helperError),
-        statusRow('OBS Studio', st.obs || 'off', st.obsError),
-        statusRow('VRChat OSC', st.vrc || 'off', st.vrcError || (st.vrcLastHeard ? `Last message ${fmtTime(st.vrcLastHeard)}` : '')),
-        statusRow('SteamVR link (battery)', st.steamvr || 'off', st.steamvrSimulated ? 'Showing a SIMULATED rig (fake signal file)' : st.steamvrError),
-        statusRow('Media (Spotify & more)', st.media || 'off', st.mediaError),
-        statusRow('YouTube Music (Pear)', (st.pear && st.pear.status) || 'off', st.pear && st.pear.error),
-        statusRow('Spotify (Like)', (st.spotify && st.spotify.status) || 'off', st.spotify && st.spotify.status === 'connected' && st.spotify.user ? `Signed in as ${st.spotify.user.name}` : (st.spotify && st.spotify.error) || ''),
-        statusRow('Twitch', (st.twitch && st.twitch.status) || 'off', st.twitch && st.twitch.status === 'connected' && st.twitch.user ? `Signed in as ${st.twitch.user.name}` : (st.twitch && st.twitch.error) || ''),
-        h('p', { class: 'muted small' }, `VR Macro Pad ${state.app.version}${state.app.devMode ? ' (dev server)' : ''}. OBS and VRChat are only contacted when a button or trigger uses them.`)));
+      const names = { obs: 'OBS Studio', vrchat: 'VRChat OSC', steamvr: 'SteamVR link (battery)', pear: 'YouTube Music (Pear)', spotify: 'Spotify (Like)', twitch: 'Twitch', starter: 'Media (Spotify & more)', voicemeeter: 'Voicemeeter' };
+      const rows = [statusRow('Windows helper (audio & keys)', st.helper || 'off', st.helperError)];
+      for (const m of state.catalog.plugins || []) {
+        const s = pluginStatus(m.id);
+        rows.push(statusRow(names[m.id] || m.name, pluginDot(s), pluginDetail(m.id, s)));
+      }
+      rows.push(h('p', { class: 'muted small' }, `VR Macro Pad ${state.app.version}${state.app.devMode ? ' (dev server)' : ''}. OBS and VRChat are only contacted when a button or trigger uses them.`));
+      content.append(h('div', { class: 'stack' }, rows));
     } else if (tab === 'log') {
       const rows = [...state.log].reverse();
       content.append(h('div', { class: 'log' }, rows.length ? rows.map((e) => h('div', { class: `log-row ${e.level}` }, h('span', { class: 'muted' }, fmtTime(e.t)), e.text)) : h('p', { class: 'muted' }, 'Nothing has happened yet.')));

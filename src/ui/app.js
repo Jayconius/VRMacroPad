@@ -1,7 +1,7 @@
 // Entry point: top bar, lock button, and wiring between the core's pushed events and the views.
 import { h, clear } from './util.js';
 import * as net from './net.js';
-import { state, notify, subscribe, currentPage, view, overlayPages } from './state.js';
+import { state, notify, subscribe, currentPage, view, overlayPages, pluginStatus, pluginDot } from './state.js';
 import { renderOverlayTopbar, startOverlayExtras } from './overlay-view.js';
 import { renderDashboard } from './dashboard-view.js';
 import { startVrInput } from './vr-input.js';
@@ -9,6 +9,7 @@ import { toast, anyModalOpen } from './modal.js';
 import { createGridView } from './grid-view.js';
 import { startNewButton, editButton } from './editor.js';
 import { openSettings, openPageDialog, openInfo } from './dialogs.js';
+import { watchUpdates } from './update-dialog.js';
 import { setActivePage, lockEditing, unlockEditing, touchEdit } from './commands.js';
 
 const root = document.getElementById('app');
@@ -89,15 +90,63 @@ function windowControls() {
   return h('div', { class: 'win-controls' }, ctl('–', 'Minimize', 'minimize'), ctl('▢', 'Maximize / restore', 'maximize'), ctl('✕', 'Close', 'close', 'close'));
 }
 
-function statusDots() {
-  const st = state.status;
-  const dots = [];
-  const add = (label, s) => { if (s && s !== 'off') dots.push(h('span', { class: `chip ${s}`, title: `${label}: ${s}` }, h('span', { class: `dot ${s}` }), label)); };
-  add('OBS', st.obs);
-  add('VRChat', st.vrc);
-  add('Voicemeeter', st.voicemeeter);
-  if (st.helper === 'error') add('Helper', 'error');
-  return dots;
+// ---- connections: ONE icon in the top bar; clicking it lists every plugin that is connected, connecting or failing ----
+// A plugin that is not in use ('off'), switched off, or waiting for a sign-in nobody asked for is not listed.
+const GOOD = new Set(['ok', 'connected', 'listening']);
+const BUSY = new Set(['connecting', 'starting', 'authorizing']);
+const BAD = new Set(['error', 'auth-failed']);
+const STATE_TEXT = { ok: 'Connected', connected: 'Connected', listening: 'Listening', connecting: 'Connecting…', starting: 'Starting…', authorizing: 'Waiting for you to approve', error: 'Problem', 'auth-failed': 'Sign-in failed' };
+
+function connections() {
+  const list = [];
+  for (const p of state.catalog.plugins || []) {
+    const st = pluginStatus(p.id);
+    const s = pluginDot(st);
+    if (GOOD.has(s) || BUSY.has(s) || BAD.has(s)) list.push({ name: p.name, state: s, detail: BAD.has(s) ? (st.error || '') : '' });
+  }
+  if (state.status.helper === 'error') list.push({ name: 'Windows helper', state: 'error', detail: '' });
+  return list;
+}
+// One color for the icon: red if anything is wrong, amber while something is still connecting, otherwise green.
+const summaryState = (list) => (list.some((c) => BAD.has(c.state)) ? 'error' : list.some((c) => BUSY.has(c.state)) ? 'connecting' : 'ok');
+
+let connPop = null; // the open list, if any: { el, off }
+function closeConnections() {
+  if (!connPop) return;
+  connPop.off();
+  connPop.el.remove();
+  connPop = null;
+}
+function openConnections(anchor) {
+  closeConnections();
+  const list = connections();
+  const rows = list.map((c) => h('div', { class: 'conn-row' },
+    h('span', { class: `dot ${c.state}` }),
+    h('span', { class: 'conn-name' }, c.name),
+    h('span', { class: 'conn-state muted small' }, c.detail || STATE_TEXT[c.state] || c.state)));
+  const el = h('div', { class: 'conn-pop', role: 'dialog', 'aria-label': 'Connections' },
+    h('div', { class: 'conn-title' }, 'Connections'),
+    rows.length ? rows : h('div', { class: 'muted small' }, 'Nothing is connected right now.'));
+  document.body.append(el);
+  const r = anchor.getBoundingClientRect();
+  el.style.top = `${Math.round(r.bottom + 8)}px`;
+  el.style.right = `${Math.max(8, Math.round(window.innerWidth - r.right))}px`;
+  const away = (e) => { if (!el.contains(e.target) && !anchor.contains(e.target)) closeConnections(); };
+  const key = (e) => { if (e.key === 'Escape') closeConnections(); };
+  document.addEventListener('pointerdown', away, true);
+  document.addEventListener('keydown', key);
+  connPop = { el, off: () => { document.removeEventListener('pointerdown', away, true); document.removeEventListener('keydown', key); } };
+}
+
+// The single icon. Hidden when nothing is connected, so a quiet setup keeps a quiet bar.
+function connectionsButton() {
+  const list = connections();
+  if (!list.length) { closeConnections(); return null; }
+  const s = summaryState(list);
+  const btn = h('button', { class: `conn-btn ${s}`, title: `Connections: ${list.length} active. Click for details.`, 'aria-label': 'Connections', onclick: () => (connPop ? closeConnections() : openConnections(btn)) },
+    h('span', { class: `dot ${s}` }), h('span', { class: 'conn-count' }, String(list.length)));
+  if (connPop) queueMicrotask(() => { if (btn.isConnected) openConnections(btn); else closeConnections(); }); // the bar was rebuilt while the list was open: refresh it
+  return btn;
 }
 
 // Rebuilding the bar while a finger/laser is down on it would swallow the click or
@@ -107,9 +156,10 @@ let topbarSignature = '';
 function renderTopbar() {
   if (view.overlay) { renderOverlayTopbar(topbar); return; }
   const st = state.status;
+  const conn = connections().map((c) => [c.name, c.state, c.detail]);
   const signature = JSON.stringify([
     state.config.pages.map((p) => [p.id, p.name]), state.activePage, state.edit.on, state.edit.unlockMethod,
-    state.config.settings.lock, st.obs, st.vrc, st.helper, state.config.settings.window.frameless, state.config.settings.window.cleanView, state.app.hasHost,
+    state.config.settings.lock, conn, st.helper, state.config.settings.window.frameless, state.config.settings.window.cleanView, state.app.hasHost,
   ]);
   if (signature === topbarSignature) return;
   topbarSignature = signature;
@@ -122,6 +172,7 @@ function renderTopbar() {
       p.name, editing && active ? h('span', { class: 'gear' }, '⚙') : null);
   }));
   if (clean) {
+    closeConnections();
     // Buttons only: the pages, and one faint button to bring everything back.
     topbar.append(tabs, h('span', { class: 'spacer' }),
       h('button', { class: 'clean-exit', title: 'Show the full window again', onclick: () => net.request('view.clean', { on: false }).catch(() => {}) }, '⋯'));
@@ -132,7 +183,7 @@ function renderTopbar() {
     tabs,
     editing ? h('button', { class: 'btn-secondary small', title: 'Add a page', onclick: () => openPageDialog(null, { isNew: true }) }, '＋ Page') : null,
     h('span', { class: 'spacer' }),
-    h('div', { class: 'chips' }, statusDots()),
+    connectionsButton(),
     editing ? h('button', { class: 'btn-primary', onclick: () => startNewButton(null) }, '＋ Add button') : null,
     editing ? h('button', { class: 'icon-btn', title: 'Settings', onclick: openSettings }, '⚙️') : null,
     h('button', { class: 'icon-btn', title: 'Status, activity and VR help', onclick: openInfo }, 'ⓘ'),
@@ -215,7 +266,7 @@ function syncClock(data) {
 net.on('init', (m) => {
   Object.assign(state, {
     ready: true, config: m.config, catalog: m.catalog, buttonStates: m.buttonStates, widgetData: m.widgetData || {}, activePage: m.activePage,
-    edit: m.edit, status: m.status, log: m.log, app: m.app,
+    edit: m.edit, status: m.status, update: m.update || null, log: m.log, app: m.app,
   });
   if (view.overlay) state.edit = { on: false, relockAt: 0, unlockMethod: 'hold' }; // the overlay is always in use mode
   if (view.editor) state.app.hasHost = false; // no window buttons or see-through view inside VR
@@ -228,6 +279,7 @@ net.on('buttonStates', (m) => { state.buttonStates = m.states; notify(); });
 net.on('page', (m) => { if (!view.overlay) state.activePage = m.id; notify(); });
 net.on('edit', (m) => { state.edit = view.overlay ? { ...m.edit, on: false } : m.edit; notify(); });
 net.on('status', (m) => { state.status = m.status; notify(); });
+net.on('update', (m) => { state.update = m.update; notify(); });
 net.on('running', (m) => { if (m.on) state.running.add(m.id); else state.running.delete(m.id); notify(); });
 net.on('pressResult', (m) => grid.flash(m.id, m.ok));
 net.on('toast', (m) => {
@@ -236,6 +288,7 @@ net.on('toast', (m) => {
   toast(m.entry.text, m.entry.level);
 });
 
+watchUpdates();
 if (view.overlay) startOverlayExtras();
 if (view.editor) startVrInput();
 net.connect();

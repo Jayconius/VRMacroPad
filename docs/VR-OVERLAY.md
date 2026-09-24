@@ -2,7 +2,7 @@
 
 [← Back to the README](../README.md) · [Full guide](GUIDE.md)
 
-VR Macro Pad 2.0 is a **real SteamVR overlay**: your deck floats in the headset, you point a controller at it and pull the
+VR Macro Pad is a **real SteamVR overlay**: your deck floats in the headset, you point a controller at it and pull the
 trigger. It works next to XSOverlay and OVR Toolkit, and with any headset that runs through SteamVR (Quest over Link / Air Link /
 Virtual Desktop, Index, Vive, Pimax, Steam Frame streaming from a PC...). It does not need a window capture, and the desktop
 window keeps working: both show the same deck and follow each other live.

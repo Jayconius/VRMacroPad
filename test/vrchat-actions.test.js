@@ -4,7 +4,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const dgram = require('dgram');
 const { defs, STATE_KEYS } = require('../src/core/actions');
-const { fillTemplate } = require('../src/core/actions/vrchat');
+const { fillTemplate } = require('../plugins/vrchat/actions');
 const { createApp } = require('../src/core');
 const { encode } = require('../src/core/osc');
 const { tempDir, FakeHelper, waitFor, sleep } = require('./helpers');
@@ -18,7 +18,7 @@ function fakeCtx({ hub = {}, playing = null } = {}) {
     hub: { get: (k) => hub[k] },
     osc: { send: async (address, args) => { sent.push({ address, args }); } },
     oscTo: async (host, port, address, args) => { sent.push({ host, port, address, args }); },
-    vrc: { remember: (n, v) => { remembered[n] = v; } },
+    plugin: (id) => (id === 'vrchat' ? { remember: (n, v) => { remembered[n] = v; } } : null),
     nowPlaying: () => playing,
   };
   return ctx;
@@ -162,9 +162,9 @@ test('vrchat: real UDP: a game control arrives as the OSC messages VRChat expect
     assert.deepEqual(got[1].subarray(got[1].length - 4), Buffer.from([0, 0, 0, 1]), 'the middle message is the press');
 
     // messages VRChat sends about itself
-    app.providers.onOsc({ address: '/avatar/parameters/AFK', args: [true] });
-    app.providers.onOsc({ address: '/avatar/parameters/VRMode', args: [1] });
-    app.providers.onOsc({ address: '/avatar/parameters/Seated', args: [false] });
+    app.providers.get('vrchat').onOsc({ address: '/avatar/parameters/AFK', args: [true] });
+    app.providers.get('vrchat').onOsc({ address: '/avatar/parameters/VRMode', args: [1] });
+    app.providers.get('vrchat').onOsc({ address: '/avatar/parameters/Seated', args: [false] });
     assert.equal(app.hub.eval('vrc.AFK'), true);
     assert.equal(app.hub.eval('vrc.VRMode'), true);
     assert.equal(app.hub.eval('vrc.Seated'), false);
@@ -180,10 +180,10 @@ test('vrchat: what is playing is found from the media players', async () => {
   try {
     await app.start();
     assert.equal(app.providers.nowPlaying(), null);
-    app.providers.mediaInfo.set('a', { available: true, title: 'Paused one', artist: 'A', playing: false });
-    app.providers.mediaInfo.set('b', { available: true, title: 'Playing one', artist: 'B', playing: true });
+    app.providers.get('starter').mediaInfo.set('a', { available: true, title: 'Paused one', artist: 'A', playing: false });
+    app.providers.get('starter').mediaInfo.set('b', { available: true, title: 'Playing one', artist: 'B', playing: true });
     assert.deepEqual(app.providers.nowPlaying(), { title: 'Playing one', artist: 'B', playing: true }, 'the one that is playing wins');
-    app.providers.mediaInfo.delete('b');
+    app.providers.get('starter').mediaInfo.delete('b');
     assert.equal(app.providers.nowPlaying().title, 'Paused one');
     await sleep(1);
   } finally { await app.stop(); }

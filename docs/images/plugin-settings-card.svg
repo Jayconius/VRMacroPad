@@ -1,0 +1,82 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 520" width="900" height="520" role="img" aria-labelledby="t d">
+  <title id="t">From plugin.js to the Settings screen</title>
+  <desc id="d">Lines in plugin.js on the left map to the pieces of the plugin's card in Settings, Plugins on the right.</desc>
+  <style>
+    text { font-family: -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; }
+    .mono { font-family: ui-monospace, SFMono-Regular, Consolas, Menlo, monospace; }
+    .h { font-size: 22px; font-weight: 700; fill: #f2f5fa; }
+    .sub { font-size: 14px; fill: #9fb0c8; }
+    .c { font-size: 13.5px; fill: #c9d4e5; }
+    .lab { font-size: 13px; fill: #9fb0c8; }
+    .ui { font-size: 14px; fill: #f2f5fa; }
+  </style>
+  <rect width="900" height="520" rx="18" fill="#101826"/>
+  <text x="36" y="52" class="h">From plugin.js to the Settings screen</text>
+  <text x="36" y="76" class="sub">You describe the plugin; the app builds the UI. No interface code to write.</text>
+
+  <!-- code panel -->
+  <rect x="36" y="100" width="380" height="386" rx="14" fill="#0b111c" stroke="#2b3b58"/>
+  <text x="54" y="128" class="c mono" style="fill:#7d8ba1">// plugin.js</text>
+
+  <rect x="46" y="140" width="360" height="24" rx="5" fill="#22335a"/>
+  <text x="54" y="157" class="c mono">name: <tspan fill="#8fd694">'My Discord Webhook'</tspan>,</text>
+  <text x="54" y="184" class="c mono">icon: <tspan fill="#8fd694">'chat'</tspan>,</text>
+
+  <rect x="46" y="196" width="360" height="24" rx="5" fill="#2c2a55"/>
+  <text x="54" y="213" class="c mono">instructions: () =&gt; <tspan fill="#8fd694">'In Discord: …'</tspan>,</text>
+
+  <rect x="46" y="232" width="360" height="74" rx="5" fill="#1f3d34"/>
+  <text x="54" y="252" class="c mono">settingsFields: [</text>
+  <text x="70" y="272" class="c mono">{ key: <tspan fill="#8fd694">'webhookUrl'</tspan>,</text>
+  <text x="86" y="292" class="c mono">type: <tspan fill="#8fd694">'password'</tspan> },</text>
+
+  <rect x="46" y="318" width="360" height="24" rx="5" fill="#45301f"/>
+  <text x="54" y="335" class="c mono">testOptionKind: <tspan fill="#8fd694">'mydiscord.test'</tspan>,</text>
+
+  <rect x="46" y="354" width="360" height="24" rx="5" fill="#4d2a3a"/>
+  <text x="54" y="371" class="c mono">actions: require(<tspan fill="#8fd694">'./actions'</tspan>),</text>
+
+  <text x="54" y="408" class="c mono" style="fill:#7d8ba1">// and for free, on every plugin:</text>
+  <rect x="46" y="418" width="360" height="24" rx="5" fill="#2a3040"/>
+  <text x="54" y="435" class="c mono" style="fill:#c9d4e5">enabled (an on/off switch)</text>
+
+  <!-- settings card mock -->
+  <rect x="476" y="100" width="388" height="386" rx="14" fill="#182236" stroke="#2b3b58"/>
+  <text x="496" y="126" class="lab">Settings → Plugins</text>
+
+  <rect x="492" y="138" width="356" height="336" rx="12" fill="#101826" stroke="#2b3b58"/>
+  <rect x="504" y="150" width="332" height="26" rx="6" fill="#22335a"/>
+  <text x="516" y="169" class="ui" style="font-weight:700">My Discord Webhook</text>
+  <circle cx="820" cy="163" r="5" fill="#3fb88a"/>
+
+  <rect x="504" y="186" width="332" height="24" rx="6" fill="#2a3040"/>
+  <rect x="514" y="192" width="13" height="13" rx="3" fill="#4c8dff"/>
+  <text x="536" y="204" class="ui">Enabled</text>
+
+  <rect x="504" y="220" width="332" height="44" rx="6" fill="#2c2a55"/>
+  <text x="516" y="238" class="ui" style="font-size:13px">In Discord: channel settings → Integrations →</text>
+  <text x="516" y="255" class="ui" style="font-size:13px">Webhooks → New Webhook → Copy Webhook URL…</text>
+
+  <rect x="504" y="274" width="332" height="74" rx="6" fill="#1f3d34"/>
+  <text x="516" y="294" class="ui" style="font-size:13px;font-weight:700">Webhook URL</text>
+  <rect x="516" y="302" width="308" height="30" rx="6" fill="#0b111c" stroke="#2b3b58"/>
+  <text x="528" y="322" class="ui" style="font-size:16px;letter-spacing:2px">••••••••••••••••</text>
+
+  <rect x="504" y="358" width="332" height="36" rx="6" fill="#45301f"/>
+  <rect x="514" y="364" width="200" height="24" rx="6" fill="#2b3b58"/>
+  <text x="528" y="381" class="ui" style="font-size:13px">Save and test connection</text>
+
+  <rect x="504" y="404" width="332" height="58" rx="6" fill="#4d2a3a"/>
+  <text x="516" y="426" class="ui" style="font-size:13px;font-weight:700">Button picker → My Discord</text>
+  <text x="516" y="446" class="ui" style="font-size:13px">Send a message</text>
+
+  <!-- connector lines -->
+  <g stroke-width="2" fill="none" opacity="0.9">
+    <path d="M406 152 C 450 152, 470 163, 504 163" stroke="#4c8dff"/>
+    <path d="M406 208 C 450 208, 470 240, 504 240" stroke="#8b86ff"/>
+    <path d="M406 270 C 450 270, 470 300, 504 312" stroke="#3fb88a"/>
+    <path d="M406 330 C 450 330, 470 376, 504 376" stroke="#e8a45c"/>
+    <path d="M406 366 C 450 366, 470 430, 504 432" stroke="#e87c9f"/>
+    <path d="M406 430 C 450 430, 470 210, 504 199" stroke="#8a97ad" stroke-dasharray="5 5"/>
+  </g>
+</svg>

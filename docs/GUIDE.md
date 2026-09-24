@@ -108,11 +108,13 @@ Every button is a list of steps with optional delays.
 
 ## Setting up the integrations
 
-* **OBS**: Tools → WebSocket Server Settings → enable. Enter the port/password in Settings → Connections.
+Every integration is a plugin: open **Settings → Plugins** and expand its card. Cards that need a one-time setup have an **Instructions** button with numbered steps.
+
+* **OBS**: Tools → WebSocket Server Settings → enable. Enter the port/password in Settings → Plugins.
 * **VRChat**: Action Menu → Options → OSC → Enabled. The VRChat mic action needs VRChat's mic mode set to *Toggle*.
 * **Spotify like**: everything in the Spotify group except *Like* needs nothing. Windows has no like button, so Like uses the Spotify
   Web API: at [developer.spotify.com/dashboard](https://developer.spotify.com/dashboard) create an app, add the Redirect URI shown in
-  Settings → Connections → Spotify (`http://127.0.0.1:17422/callback`), paste its Client ID there and press **Connect Spotify**.
+  Settings → Plugins → Spotify (`http://127.0.0.1:17422/callback`), paste its Client ID there and press **Connect Spotify**.
   Spotify's rules (since Feb 2026): an app in development mode only works while its owner has Premium, for up to 5 people added
   under *User Management*. So this cannot be shipped to everyone the way Twitch is: each person uses their own Client ID.
   The app never sees your password, needs no client secret, and only asks for: current song, read and change Liked Songs.
@@ -120,7 +122,7 @@ Every button is a list of steps with optional delays.
   (and browsers, VLC...), needs no login and no Premium. It shows what is playing *on this PC*.
 * **YouTube Music (Pear Desktop)**: it already shows up in the *Now playing* widget through Windows (Player: `youtube music`).
   For more (album name, like / shuffle / repeat buttons, volume), use Pear's API: in Pear enable **Plugins → API Server**
-  (set its hostname to `127.0.0.1` so only this PC can reach it), then Settings → Connections → YouTube Music →
+  (set its hostname to `127.0.0.1` so only this PC can reach it), then Settings → Plugins → YouTube Music →
   **Connect Pear**, and click **Allow** in the Pear window once. Set the widget's Player to `pear`.
   Pear's volume takes the slider position but reports loudness on a curve; the app converts, so "raise by 10" moves the slider by 10.
 * **Voicemeeter**: install it (Standard, Banana or Potato) and run it. The app finds VB-Audio's Remote API by itself (`VoicemeeterRemote64.dll`,
@@ -130,13 +132,26 @@ Every button is a list of steps with optional delays.
   only if SteamVR is already running (it never starts it). What shows up depends on what your headset's driver reports.
   Devices seen before are remembered, so a tracker that is switched off still appears (greyed, with its last level).
   For the picture version of the widget, set its *Layout* to *Pictures*.
-* **Twitch**: Settings → Connections → Twitch → **Connect Twitch**. Twitch shows a short code; open the link, enter it
+* **Twitch**: Settings → Plugins → Twitch → **Connect Twitch**. Twitch shows a short code; open the link, enter it
   and approve with your own account. Nothing else to set up: the app ships with its own registered Twitch application
   (its public Client ID is in `src/core/app-config.js`), and there is no client secret. Your login is stored encrypted
   with your Windows account. *Check permissions* confirms Twitch granted everything. Sign-in lasts as long as you use
   it (Twitch expires it after 30 idle days). To use your own Twitch app instead, open *Advanced* and paste its Client ID
   (register it at [dev.twitch.tv/console](https://dev.twitch.tv/console): Client Type **Public**, OAuth Redirect URL
   **`http://localhost`**, which is required by the form but never used).
+* **Kick**: Settings → Plugins → Kick → **Connect Kick**, then log in and approve on kick.com. It uses Kick's official API only.
+  Buttons: chat message, title and category, ad break, timeout. Mini screens: stream status and ad breaks. (No ban / unban on purpose.)
+* **YouTube**: chat messages, go live / end stream, ad breaks, title / description / category, public / unlisted / private, and live-status and
+  channel-number mini screens, through YouTube's official API. Google has to verify an app before everyone can log in with one click, and that
+  is still pending, so for now open the YouTube card, press **Instructions** and make your own free Google app (about five minutes), paste its
+  Client ID and Secret, then press **Connect YouTube**. Nothing that targets one viewer (bans, timeouts) is included.
+* **Streamer.bot**: in Streamer.bot open Servers/Clients → WebSocket Server and start it (the defaults are fine). The plugin lists your actions by
+  name, with their group next to them; pick one for a button. Only enter a password if you turned on *Authentication* there.
+* **Discord**: create a webhook (channel settings → Integrations → Webhooks) and paste its URL into the Discord card. Then buttons can post
+  messages, cards and screenshots, share a new Steam screenshot or your last VRChat photo, and press your Discord mute / deafen / push-to-talk shortcuts.
+  **Discord Notifications** adds mini screens showing who last messaged you (with filters) and buttons that light up on a new message.
+* **Updates**: Settings → General → *Check for updates* (off by default). When on, the app asks GitHub for the latest release number, and a box offers
+  a link, **Download** and **Skip**. Portable copies save the new exe next to the old one; installed copies can install it and restart.
 
 ## Security
 
@@ -162,7 +177,7 @@ Home Assistant passwords are stored in plain text in your config; layout export 
 ## Where things are
 
 * Config, backups, token, secrets: `%APPDATA%\VR Macro Pad\` (the last 20 layouts are backed up automatically).
-* Code: `src/core` (actions, widgets, engine, providers, Twitch, server), `src/ui` (the web UI), `src/main` (Electron
+* Code: `src/core` (engine, plugin loader and runtime, widgets, server, updater), `plugins` (one folder per integration: OBS, Twitch, Kick, YouTube, Discord, VRChat, Voicemeeter...), `src/ui` (the web UI), `src/main` (Electron
   shell), `src/helper` (small C# programs for audio/keys, media sessions, SteamVR, the SteamVR overlay and Voicemeeter, compiled on first run with
   the compiler that ships with Windows). `vendor/openvr` is Valve's official OpenVR SDK (BSD licence, see its LICENSE). `src/ui/assets/devices` (the device pictures) come from the author's other app, OhFudgeMyBatteryChat (MIT, see the
   README there).
@@ -170,7 +185,7 @@ Home Assistant passwords are stored in plain text in your config; layout export 
 ## For developers
 
 ```
-npm test              # 217 tests: logic, protocols against fake OBS / VRChat / Twitch / Pear / Voicemeeter, server security, real Windows helpers
+npm test              # 336 tests: logic, protocols against fake OBS / VRChat / Twitch / Pear / Voicemeeter, server security, real Windows helpers
 npm run test:overlay  # renders the overlay page off-screen and drives it with fake laser events (~100 checks)
 npm run dist            # builds the installer and the portable exe into dist/ (needs internet the first time)
 npm run test:clean    # launches the real app to check the buttons-only view is really see-through
@@ -179,6 +194,5 @@ npm run test:single   # launches real copies to check the "only one copy at a ti
 npm run dev       # UI + core as a plain web server (no Electron) at http://127.0.0.1:17420/?token=dev-token-dev-token-dev-token-dev-token
 ```
 
-**Adding an action** = adding one object to a file in `src/core/actions/`: its `id`, label, `params` (the UI builds the
-form from them), optional `state` and `run(params, ctx)`. **Adding a widget** = an entry in `src/core/widgets.js` plus a
-renderer in `src/ui/widgets-ui.js`.
+**Adding an action or a mini screen** = writing a plugin (a folder with a few small files). See
+[BUILD-A-PLUGIN.md](BUILD-A-PLUGIN.md) for the tutorial and [PLUGIN-GUIDE.md](PLUGIN-GUIDE.md) for the reference. The built-in ones in `plugins/` are the best examples.

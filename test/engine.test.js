@@ -191,11 +191,11 @@ test('triggers: app start/stop triggers and page auto-switch follow the process 
   await waitFor(() => hub.get('proc'));
   assert.equal(engine.activePageId, 'main');
   procs = ['steam.exe', 'vrchat.exe'];
-  await app.providers.pollProc();
+  await app.providers.get('starter').pollProc();
   await waitFor(() => toasts.length === 1);
   assert.equal(engine.activePageId, 'vrc');
   procs = ['steam.exe'];
-  await app.providers.pollProc();
+  await app.providers.get('starter').pollProc();
   await waitFor(() => toasts.length === 2, 1000);
   await app.stop();
 });
@@ -228,7 +228,7 @@ test('triggers: time-of-day triggers fire once per matching minute', async () =>
 test('needs: providers only run for what the config uses', async () => {
   const { app, engine } = await boot([btn('a', [{ action: 'system.toast', params: { message: 'x' } }])]);
   let n = engine.computeNeeds();
-  assert.deepEqual([n.audio, n.obs, n.vrc, n.process], [false, false, false, false]);
+  assert.deepEqual([Boolean(n.audio), Boolean(n.obs), Boolean(n.vrc), Boolean(n.process)], [false, false, false, false]);
   const cfg = JSON.parse(JSON.stringify(engine.config));
   cfg.pages[0].buttons.push({ id: 'x1', x: 5, y: 0, w: 1, h: 1, steps: [{ action: 'obs.scene', params: { scene: 'A' } }] });
   cfg.pages[0].buttons.push({ id: 'x2', x: 6, y: 0, w: 1, h: 1, steps: [{ action: 'vrc.param', params: { name: 'Hat', type: 'bool', mode: 'toggle' } }] });
@@ -404,5 +404,32 @@ test('ha.service: posts to /api/services/<domain>/<service> with the bearer toke
   await engine.press('j');
   assert.match(toasts.at(-1).text, /not valid JSON/);
   srv.server.close();
+  await app.stop();
+});
+
+test('state: a button tied to ONE microphone follows that microphone\'s real mute state, even when Windows changes it', async () => {
+  const devices = {
+    capture: [{ id: 'micA', name: 'Mic A', isDefault: true, muted: false }, { id: 'micB', name: 'Mic B', isDefault: false, muted: true }],
+    render: [{ id: 'spkA', name: 'Speakers', isDefault: true, muted: false }],
+  };
+  const { app, engine } = await boot([
+    btn('a', [{ action: 'audio.micMute', params: { mode: 'toggle', device: 'micA' } }]),
+    btn('b', [{ action: 'audio.micMute', params: { mode: 'toggle', device: 'micB' } }]),
+    btn('spk', [{ action: 'audio.outputMute', params: { mode: 'toggle', device: 'spkA' } }]),
+  ], { helperAnswers: { 'audio.snapshot': () => ({ capture: { id: 'micA', muted: false, volume: 100 }, render: { id: 'spkA', muted: false, volume: 50 } }), 'audio.devices': (args) => devices[args.flow] } });
+  await waitFor(() => engine.computeButtonStates().b && !engine.computeButtonStates().b.unknown);
+  let s = engine.computeButtonStates();
+  assert.deepEqual([s.a.active, s.b.active, s.spk.active], [false, true, false], 'each button shows its own device, not the default one');
+
+  // The mic is muted from somewhere else (Windows settings, a hardware button): the button must catch up, not keep its old answer.
+  devices.capture[0].muted = true;
+  devices.render[0].muted = true;
+  await app.providers.get('starter').pollAudio();
+  s = engine.computeButtonStates();
+  assert.deepEqual([s.a.active, s.b.active, s.spk.active], [true, true, true]);
+  devices.capture[1].muted = false;
+  await app.providers.get('starter').pollAudio();
+  assert.equal(engine.computeButtonStates().b.active, false, 'unmuting one mic changes only that mic\'s button');
+  assert.equal(engine.computeButtonStates().a.active, true);
   await app.stop();
 });

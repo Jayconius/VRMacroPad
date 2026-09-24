@@ -1,0 +1,59 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 430" width="900" height="430" role="img" aria-labelledby="t d">
+  <title id="t">What happens when you press a plugin button</title>
+  <desc id="d">A button press runs the plugin's action, which calls the plugin's runtime, which calls the outside service. The runtime then sets a state value that lights the button up.</desc>
+  <style>
+    text { font-family: -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; }
+    .mono { font-family: ui-monospace, SFMono-Regular, Consolas, Menlo, monospace; }
+    .h { font-size: 22px; font-weight: 700; fill: #f2f5fa; }
+    .sub { font-size: 14px; fill: #9fb0c8; }
+    .box { font-size: 17px; font-weight: 700; fill: #f2f5fa; }
+    .code { font-size: 13px; fill: #c9d4e5; }
+    .step { font-size: 14px; font-weight: 700; fill: #101826; }
+  </style>
+  <defs>
+    <marker id="a" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="8" markerHeight="8" orient="auto"><path d="M0 0 L10 5 L0 10z" fill="#9fb0c8"/></marker>
+    <marker id="g" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="8" markerHeight="8" orient="auto"><path d="M0 0 L10 5 L0 10z" fill="#5865f2"/></marker>
+  </defs>
+  <rect width="900" height="430" rx="18" fill="#101826"/>
+  <text x="36" y="52" class="h">What happens when you press a plugin button</text>
+  <text x="36" y="76" class="sub">Three small pieces of your code; the app wires them together.</text>
+
+  <!-- boxes -->
+  <rect x="36" y="120" width="150" height="110" rx="14" fill="#182236" stroke="#2b3b58"/>
+  <text x="111" y="160" text-anchor="middle" class="box">Macro Pad</text>
+  <text x="111" y="182" text-anchor="middle" class="sub">the button you</text>
+  <text x="111" y="200" text-anchor="middle" class="sub">tapped or hit in VR</text>
+
+  <rect x="236" y="120" width="190" height="110" rx="14" fill="#45301f" stroke="#e8a45c" stroke-width="2"/>
+  <text x="331" y="152" text-anchor="middle" class="box" style="fill:#f2c48a">actions.js</text>
+  <text x="331" y="176" text-anchor="middle" class="code mono">run(params, ctx)</text>
+  <text x="331" y="198" text-anchor="middle" class="code mono">ctx.plugin('mydiscord')</text>
+
+  <rect x="476" y="120" width="190" height="110" rx="14" fill="#1f3d34" stroke="#3fb88a" stroke-width="2"/>
+  <text x="571" y="152" text-anchor="middle" class="box" style="fill:#7fe0b8">runtime.js</text>
+  <text x="571" y="176" text-anchor="middle" class="code mono">send(text)</text>
+  <text x="571" y="198" text-anchor="middle" class="code mono">fetch(webhookUrl…)</text>
+
+  <rect x="716" y="120" width="148" height="110" rx="14" fill="#232a5e" stroke="#5865f2" stroke-width="2"/>
+  <text x="790" y="160" text-anchor="middle" class="box" style="fill:#aab3ff">Discord</text>
+  <text x="790" y="182" text-anchor="middle" class="sub">your channel</text>
+  <text x="790" y="200" text-anchor="middle" class="sub">gets the message</text>
+
+  <!-- forward arrows -->
+  <path d="M186 175 H232" stroke="#9fb0c8" stroke-width="2.5" fill="none" marker-end="url(#a)"/>
+  <path d="M426 175 H472" stroke="#9fb0c8" stroke-width="2.5" fill="none" marker-end="url(#a)"/>
+  <path d="M666 175 H712" stroke="#9fb0c8" stroke-width="2.5" fill="none" marker-end="url(#a)"/>
+
+  <!-- step badges -->
+  <circle cx="209" cy="146" r="13" fill="#9fb0c8"/><text x="209" y="151" text-anchor="middle" class="step">1</text>
+  <circle cx="449" cy="146" r="13" fill="#9fb0c8"/><text x="449" y="151" text-anchor="middle" class="step">2</text>
+  <circle cx="689" cy="146" r="13" fill="#9fb0c8"/><text x="689" y="151" text-anchor="middle" class="step">3</text>
+
+  <!-- return path: state -->
+  <path d="M571 230 V300 H111 V234" stroke="#5865f2" stroke-width="2.5" stroke-dasharray="7 6" fill="none" marker-end="url(#g)"/>
+  <circle cx="571" cy="262" r="13" fill="#5865f2"/><text x="571" y="267" text-anchor="middle" class="step" style="fill:#fff">4</text>
+  <rect x="110" y="318" width="700" height="74" rx="12" fill="#182236"/>
+  <text x="130" y="346" class="box" style="font-size:16px;fill:#aab3ff">Then the runtime reports back</text>
+  <text x="130" y="370" class="code mono">hub.set('mydiscord.lastOk', true)</text>
+  <text x="400" y="370" class="sub">→ the button lights up, no extra code in the button</text>
+</svg>

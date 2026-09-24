@@ -4,7 +4,8 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const { EventEmitter } = require('events');
 const { createApp } = require('../src/core');
-const { rollDice, flipCoin, fillTemplate, timerDurationMs, parseNames } = require('../src/core/widgets');
+const { rollDice, flipCoin, fillTemplate, timerDurationMs } = require('../src/core/widgets');
+const { parseNames } = require('../plugins/steamvr/pictures');
 const { tempDir, FakeHelper, waitFor, sleep } = require('./helpers');
 
 const cleanup = [];
@@ -290,7 +291,7 @@ test('battery: devices are filtered, named, and reported; low battery becomes a 
   assert.equal(app.hub.eval('vr.connected'), true);
 
   snapshot = { connected: false, error: 'SteamVR is not running', devices: [] };
-  await app.providers.pollVr();
+  await app.providers.get('steamvr').poll();
   assert.equal(data('bat').connected, false);
   assert.equal(data('bat').error, 'SteamVR is not running');
   assert.equal(app.hub.eval('vr.connected'), false);
@@ -301,7 +302,7 @@ test('battery: devices are filtered, named, and reported; low battery becomes a 
   cfg.pages[0].buttons[0].widget.params.showDropped = false; // the headset seen earlier is not listed as "off"
   engine.updateConfig(cfg);
   snapshot = { connected: true, error: '', devices: [{ index: 0, class: 'hmd', role: '', serial: 'H', model: 'Q', hasBattery: true, battery: 90, charging: false }, { index: 1, class: 'tracker', role: '', serial: 'T', model: 'T', hasBattery: true, battery: 10, charging: false }] };
-  await app.providers.pollVr();
+  await app.providers.get('steamvr').poll();
   assert.deepEqual(data('bat').devices.map((x) => x.class), ['hmd']);
 });
 
@@ -339,11 +340,11 @@ test('media: track info, live progress, album art fetched once, controls and the
   assert.equal(d.positionMs, 12_000, 'position projected forward by the time since the player last reported');
   assert.equal(d.thumbKey, 'k1');
   assert.ok(!('thumb' in d), 'picture data is never part of the widget state');
-  assert.equal(app.providers.mediaThumb('k1'), 'data:image/png;base64,AAAA');
-  assert.equal(helper.calls[0].app, 'spotify');
-  await app.providers.pollMedia();
+  assert.equal(app.providers.get('starter').mediaThumb('k1'), 'data:image/png;base64,AAAA');
+  assert.equal(helper.calls.find((c) => c.op === 'get' && c.app === 'spotify').app, 'spotify', 'the widget asks about the player it was set to'); // (the default Play / Pause button also asks about "any")
+  await app.providers.get('starter').pollMedia();
   assert.equal(helper.calls.at(-1).knownThumbKey, 'k1', 'asks not to resend a picture it already has');
-  assert.equal(app.providers.mediaThumb('k1'), 'data:image/png;base64,AAAA', 'still cached');
+  assert.equal(app.providers.get('starter').mediaThumb('k1'), 'data:image/png;base64,AAAA', 'still cached');
 
   await engine.widgetCommand('np', 'next');
   assert.deepEqual(helper.calls.find((c) => c.op === 'control'), { op: 'control', app: 'spotify', cmd: 'next' });
@@ -371,11 +372,11 @@ test('media: nothing playing, a paused player, and a failing helper are all show
   await waitFor(() => data('np').pending === undefined && data('np').available === false, 3000);
   assert.deepEqual(data('np').sessions, ['brave.exe']);
   mode = 'paused';
-  await app.providers.pollMedia();
+  await app.providers.get('starter').pollMedia();
   assert.deepEqual([data('np').available, data('np').playing, data('np').durationMs, data('np').canSeek], [true, false, 0, false]);
   assert.equal(data('np').positionMs, 5000, 'a paused track does not advance');
   mode = 'error';
-  await app.providers.pollMedia();
+  await app.providers.get('starter').pollMedia();
   assert.equal(data('np').available, false);
   assert.match(data('np').error, /did not answer/);
 });
@@ -390,14 +391,14 @@ test('media: the Player picker lists what Windows sees right now, and a widget w
     ],
   });
   const { app } = await boot([widget('np', 'media', {})], { mediaHelper: helper });
-  await waitFor(() => helper.calls.some((c) => c.op === 'get'), 3000);
-  assert.equal(helper.calls.find((c) => c.op === 'get').app, 'auto', 'no player chosen means automatic');
+  await waitFor(() => helper.calls.some((c) => c.op === 'get' && c.app === 'auto'), 3000);
+  assert.ok(helper.calls.some((c) => c.op === 'get' && c.app === 'auto'), 'no player chosen means automatic');
   const list = await app.providers.options('media.players');
   assert.deepEqual(list.map((o) => o.value), ['auto', 'any', 'brave', 'spotify', 'youtube music', 'pear']);
   assert.match(list[3].label, /^Spotify\s+\(paused: Danza Kuduro - The Saints\)$/);
   assert.match(list[4].label, /playing: Sandstorm - Darude/);
   const empty = await new FakeHelper({ list: new Error('helper down') });
-  app.providers.mediaHelper = empty;
+  app.providers.helperMap.media = empty;
   assert.deepEqual((await app.providers.options('media.players')).map((o) => o.value), ['auto', 'any', 'pear'], 'still offers the fixed choices when the helper fails');
 });
 
@@ -439,7 +440,7 @@ test('spotify pack: shuffle / repeat / seek / volume actions reach the right hel
 
   // Spotify turns shuffle and repeat on: the buttons light up
   info = { ...info, status: 'Playing', shuffle: true, repeat: 'Track' };
-  await app.providers.pollMedia();
+  await app.providers.get('starter').pollMedia();
   assert.equal(app.hub.eval('spotify.shuffle'), true);
   assert.equal(app.hub.eval('spotify.repeat'), true);
   assert.equal(app.hub.eval('spotify.playing'), true);
@@ -454,6 +455,6 @@ test('spotify pack: the now-playing widget offers shuffle and repeat only when t
   await waitFor(() => data('np').available === true, 3000);
   assert.deepEqual(data('np').extras, { shuffle: true, repeat: 'ALL' });
   info = { ...info, shuffle: null, repeat: '' };
-  await app.providers.pollMedia();
+  await app.providers.get('starter').pollMedia();
   assert.equal(data('np').extras, undefined, 'a player that says nothing about shuffle gets no extra buttons');
 });

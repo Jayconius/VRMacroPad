@@ -4,7 +4,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const http = require('http');
 const { WebSocketServer } = require('ws');
-const { PearClient, actualFromSlider, sliderFromActual } = require('../src/core/pear');
+const { PearClient, actualFromSlider, sliderFromActual } = require('../plugins/pear/client');
 const { SecretStore } = require('../src/core/secrets');
 const { createApp } = require('../src/core');
 const { tempDir, FakeHelper, waitFor, sleep } = require('./helpers');
@@ -314,7 +314,7 @@ async function bootApp(fake, buttons) {
   cleanup.push(() => app.stop());
   await app.start();
   const cfg = JSON.parse(JSON.stringify(app.engine.config));
-  cfg.settings.pear = { host: '127.0.0.1', port: fake.port };
+  cfg.settings.plugins.pear = { host: '127.0.0.1', port: fake.port };
   cfg.pages = [{ id: 'p', name: 'P', cols: 8, rows: 12, buttons: buttons.map((b, i) => ({ x: (i * 2) % 8, y: Math.floor((i * 2) / 8) * 2, w: 2, h: 2, label: b.id, steps: [], ...b })) }];
   app.engine.updateConfig(cfg);
   const toasts = [];

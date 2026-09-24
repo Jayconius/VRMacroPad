@@ -44,277 +44,25 @@ function timerDurationMs(params) {
   return Math.max(1000, (m * 60 + s) * 1000);
 }
 
-// "serial=Name" per line -> { serial: Name }
-function parseNames(text) {
-  const out = {};
-  for (const line of String(text || '').split(/\r?\n/)) {
-    const i = line.indexOf('=');
-    if (i > 0) out[line.slice(0, i).trim().toLowerCase()] = line.slice(i + 1).trim();
-  }
-  return out;
-}
-
-const CLASS_ORDER = { hmd: 0, controller: 1, tracker: 2, basestation: 3, other: 4 };
-
-// Names for a whole list of devices. Trackers are numbered by serial so the numbers stay put when one
-// drops out or the order SteamVR reports them in changes.
-function nameDevices(devices, names) {
-  const trackers = devices.filter((d) => d.class === 'tracker' && !names[(d.serial || '').toLowerCase()]).map((d) => d.serial).sort();
-  const out = new Map();
-  for (const d of devices) {
-    const custom = names[(d.serial || '').toLowerCase()];
-    let name = custom;
-    if (!name) {
-      if (d.class === 'hmd') name = 'Headset';
-      else if (d.class === 'controller') name = d.role === 'left' ? 'Left controller' : d.role === 'right' ? 'Right controller' : 'Controller';
-      else if (d.class === 'tracker') name = `Tracker ${trackers.indexOf(d.serial) + 1}`;
-      else if (d.class === 'basestation') name = 'Base station';
-      else name = d.model || 'Device';
-    }
-    out.set(d, name);
-  }
-  return out;
-}
-
-// ---- device pictures ----
-// The illustrated pack in src/ui/assets/devices: HMD-0..5, Controller-0..3 (+L/R), Tracker-0..2,
-// Lighthouse-1.0/2.0. The UI adds "L" for the low-battery version and "DC" to a base station that is off.
-const PICTURE_PREFIX = { hmd: 'HMD', controller: 'Controller', tracker: 'Tracker', basestation: 'Lighthouse' };
-const PICTURE_STYLES = { hmd: ['0', '1', '2', '3', '4', '5'], controller: ['0', '1', '2', '3'], tracker: ['0', '1', '2'], basestation: ['1.0', '2.0'] };
-
-function pictureFor(d, override) {
-  const prefix = PICTURE_PREFIX[d.class];
-  if (!prefix) return '';
-  const styles = PICTURE_STYLES[d.class];
-  let style = '';
-  const m = /^([a-z]+)-(\d(?:\.0)?)$/i.exec(String(override || '').trim());
-  if (m && m[1].toLowerCase() === prefix.toLowerCase() && styles.includes(m[2])) style = m[2];
-  const text = `${d.model || ''} ${d.manufacturer || ''} ${d.type || ''}`;
-  if (!style) {
-    if (d.class === 'hmd') style = /cv1|rift(?! ?s(?![a-z]))/i.test(text) ? '0' : /quest ?2/i.test(text) ? '5' : /quest ?3s/i.test(text) ? '4' : /quest ?3/i.test(text) ? '3' : '1';
-    else if (d.class === 'controller') style = /knuckles|index/i.test(text) ? '1' : /cosmos/i.test(text) ? '3' : /touch.?pro|quest pro/i.test(text) ? '2' : '0';
-    else if (d.class === 'tracker') style = /tundra/i.test(text) ? '1' : '2';
-    else style = '2.0';
-  }
-  return `${prefix}-${style}${d.class === 'controller' ? (d.role === 'right' ? 'R' : 'L') : ''}`;
-}
-
 // ---- definitions ----
-const defs = [
-  {
-    id: 'clock',
-    label: 'Clock',
-    description: 'Shows the time and date, in your time zone or any other.',
-    icon: '🕒',
-    size: { w: 2, h: 1 },
-    params: [
-      { key: 'hour12', label: '12-hour clock', type: 'boolean', default: false },
-      { key: 'seconds', label: 'Show seconds', type: 'boolean', default: true },
-      { key: 'date', label: 'Show the date', type: 'boolean', default: true },
-      { key: 'timezone', label: 'Time zone (optional)', type: 'text', placeholder: 'e.g. America/New_York', suggestions: ['UTC', 'America/New_York', 'America/Chicago', 'America/Los_Angeles', 'Europe/London', 'Europe/Paris', 'Asia/Tokyo', 'Australia/Sydney'], help: 'Leave empty for your own time zone.' },
-    ],
-    defaults: { color: '#1f3a5f' },
-    initState: () => ({}),
-    data: () => ({}),
-    command: async () => {},
-  },
-  {
-    id: 'timer',
-    label: 'Countdown timer',
-    description: 'Tap to start / pause, hold to reset. Can run buttons when it finishes.',
-    icon: '⏲️',
-    size: { w: 2, h: 2 },
-    params: [
-      { key: 'minutes', label: 'Minutes', type: 'number', min: 0, max: 999, default: 5 },
-      { key: 'seconds', label: 'Seconds', type: 'number', min: 0, max: 59, default: 0 },
-      { key: 'beep', label: 'Beep when it finishes', type: 'boolean', default: true },
-    ],
-    defaults: { color: '#5a3a1f' },
-    hasFinishSteps: true,
-    initState: () => ({ mode: 'idle', endsAt: 0, remainingMs: 0 }),
-    data(ctx, button, st) {
-      return { mode: st.mode, durationMs: timerDurationMs(button.widget.params), endsAt: st.endsAt, remainingMs: st.remainingMs };
-    },
-    async command(ctx, button, st, cmd) {
-      const duration = timerDurationMs(button.widget.params);
-      if (cmd === 'hold') { ctx.runtime.setTimer(button, st, 'idle'); return; }
-      if (st.mode === 'idle' || st.mode === 'done') {
-        if (st.mode === 'done') { ctx.runtime.setTimer(button, st, 'idle'); return; }
-        st.remainingMs = duration;
-        ctx.runtime.setTimer(button, st, 'running');
-      } else if (st.mode === 'running') {
-        st.remainingMs = Math.max(0, st.endsAt - ctx.now());
-        ctx.runtime.setTimer(button, st, 'paused');
-      } else if (st.mode === 'paused') {
-        ctx.runtime.setTimer(button, st, 'running');
-      }
-    },
-  },
-  {
-    id: 'stopwatch',
-    label: 'Stopwatch',
-    description: 'Tap to start / stop, hold to reset.',
-    icon: '⏱️',
-    size: { w: 2, h: 2 },
-    params: [{ key: 'tenths', label: 'Show tenths of a second', type: 'boolean', default: true }],
-    defaults: { color: '#1f5a3a' },
-    initState: () => ({ running: false, startedAt: 0, elapsedMs: 0 }),
-    data: (ctx, button, st) => ({ running: st.running, startedAt: st.startedAt, elapsedMs: st.elapsedMs }),
-    async command(ctx, button, st, cmd) {
-      if (cmd === 'hold') { Object.assign(st, { running: false, startedAt: 0, elapsedMs: 0 }); return; }
-      if (st.running) { st.elapsedMs += ctx.now() - st.startedAt; st.running = false; st.startedAt = 0; } else { st.running = true; st.startedAt = ctx.now(); }
-    },
-  },
-  {
-    id: 'coin',
-    label: 'Coin flip',
-    description: 'Tap to flip. Optionally posts the result to your Twitch chat.',
-    icon: '🌕',
-    size: { w: 2, h: 2 },
-    params: [
-      { key: 'postToChat', label: 'Post the result to Twitch chat', type: 'boolean', default: false },
-      { key: 'template', label: 'Chat message', type: 'text', default: 'The coin landed on {result}!', help: 'Use {result}.', showIf: { key: 'postToChat', in: [true] } },
-    ],
-    defaults: { color: '#6b5a1f' },
-    initState: () => ({ last: null, seq: 0 }),
-    data: (ctx, button, st) => ({ last: st.last, seq: st.seq }),
-    async command(ctx, button, st) {
-      const result = flipCoin(ctx.random);
-      st.seq += 1;
-      st.last = { text: result, detail: '', at: ctx.now() };
-      if (button.widget.params.postToChat) await ctx.postChat(fillTemplate(button.widget.params.template || 'Coin flip: {result}', { result }));
-    },
-  },
-  {
-    id: 'dice',
-    label: 'Dice roller',
-    description: 'Roll d4 to d100 (or any size), several at once, with a modifier. Optionally posts to Twitch chat.',
-    icon: '🎲',
-    size: { w: 2, h: 2 },
-    params: [
-      { key: 'sides', label: 'Dice type', type: 'select', default: '20', options: [['4', 'd4'], ['6', 'd6'], ['8', 'd8'], ['10', 'd10'], ['12', 'd12'], ['20', 'd20'], ['100', 'd100'], ['custom', 'Custom…']] },
-      { key: 'customSides', label: 'Sides', type: 'number', min: 2, max: 1000, default: 30, showIf: { key: 'sides', in: ['custom'] } },
-      { key: 'count', label: 'How many dice', type: 'number', min: 1, max: 20, default: 1 },
-      { key: 'modifier', label: 'Modifier (+/−)', type: 'number', min: -100, max: 100, default: 0 },
-      { key: 'mode', label: 'd20 mode (single die only)', type: 'select', default: 'normal', options: [['normal', 'Normal'], ['advantage', 'Advantage (roll twice, keep higher)'], ['disadvantage', 'Disadvantage (roll twice, keep lower)']], showIf: { key: 'sides', in: ['20'] } },
-      { key: 'postToChat', label: 'Post the result to Twitch chat', type: 'boolean', default: false },
-      { key: 'template', label: 'Chat message', type: 'text', default: '🎲 Rolled {dice}: {total}', help: 'Use {dice}, {total}, {rolls}, {detail}.', showIf: { key: 'postToChat', in: [true] } },
-    ],
-    defaults: { color: '#5a1f4a' },
-    initState: () => ({ last: null, seq: 0 }),
-    data: (ctx, button, st) => ({ last: st.last, seq: st.seq }),
-    async command(ctx, button, st) {
-      const p = button.widget.params;
-      const sides = p.sides === 'custom' ? Number(p.customSides) || 6 : Number(p.sides) || 20;
-      const r = rollDice({ count: Number(p.count) || 1, sides, modifier: Number(p.modifier) || 0, mode: p.mode }, ctx.random);
-      st.seq += 1;
-      st.last = { text: String(r.total), detail: r.detail, dice: r.notation, natural: r.natural, at: ctx.now() };
-      if (p.postToChat) {
-        await ctx.postChat(fillTemplate(p.template || '🎲 {dice}: {total}', { dice: r.notation, total: r.total, rolls: r.rolls.join(', '), detail: r.detail }));
-      }
-    },
-  },
-  {
-    id: 'battery',
-    category: 'SteamVR',
-    label: 'SteamVR battery',
-    description: 'Battery level of your headset, controllers and trackers (whatever SteamVR reports), as a list or with pictures.',
-    icon: '🔋',
-    size: { w: 3, h: 2 },
-    params: [
-      { key: 'layout', label: 'Layout', type: 'select', default: 'list', options: [['list', 'List with battery bars'], ['pictures', 'Pictures (illustrated devices)']] },
-      { key: 'show', label: 'Show', type: 'multiselect', default: ['hmd', 'controller', 'tracker'], options: [['hmd', 'Headset'], ['controller', 'Controllers'], ['tracker', 'Trackers'], ['basestation', 'Base stations']] },
-      { key: 'showDropped', label: 'Also show devices that are off or dropped out (with their last level)', type: 'boolean', default: true },
-      { key: 'lowPercent', label: 'Warn below (%)', type: 'number', min: 1, max: 90, default: 20 },
-      { key: 'names', label: 'Nicknames (one per line: serial=Name)', type: 'textarea', placeholder: 'LHR-1A2B3C4D=Left foot', help: 'Trackers only have serial numbers. Turn one on and check the list to find it.' },
-      { key: 'pictures', label: 'Pictures (one per line: serial=Style)', type: 'textarea', placeholder: 'LHR-1A2B3C4D=Tracker-1', help: 'Only for the Pictures layout. Styles: HMD-0 to HMD-5, Controller-0 to Controller-3, Tracker-0 to Tracker-2, Lighthouse-1.0, Lighthouse-2.0. Left blank, a picture is chosen from the device model.', showIf: { key: 'layout', in: ['pictures'] } },
-    ],
-    defaults: { color: '#1f4a4a' },
-    needs: () => ({ vr: true }),
-    initState: () => ({}),
-    data(ctx, button) {
-      const snap = ctx.vr();
-      const p = button.widget.params;
-      const show = new Set(Array.isArray(p.show) ? p.show : ['hmd', 'controller', 'tracker']);
-      const names = parseNames(p.names);
-      const pictures = parseNames(p.pictures);
-      const live = (snap.devices || []).map((d) => ({ ...d, connected: true }));
-      const gone = p.showDropped === false || !snap.connected ? [] : (snap.dropped || []).map((d) => ({ ...d, connected: false, trackingOk: null, worn: null }));
-      const all = [...live, ...gone];
-      const shown = all.filter((d) => show.has(d.class));
-      const label = nameDevices(all, names);
-      const order = (d) => [CLASS_ORDER[d.class] === undefined ? 9 : CLASS_ORDER[d.class], d.role === 'left' ? 0 : d.role === 'right' ? 1 : 2, d.serial || ''];
-      shown.sort((a, b) => { const x = order(a); const y = order(b); return x[0] - y[0] || x[1] - y[1] || (x[2] < y[2] ? -1 : x[2] > y[2] ? 1 : 0); });
-      const devices = shown.map((d) => ({
-        name: label.get(d), class: d.class, role: d.role, serial: d.serial, connected: d.connected,
-        hasBattery: d.hasBattery, battery: d.battery, charging: d.charging, trackingOk: d.trackingOk, worn: d.worn,
-        picture: pictureFor(d, pictures[(d.serial || '').toLowerCase()]),
-      }));
-      return { connected: snap.connected, error: snap.error || '', simulated: Boolean(snap.simulated), layout: p.layout === 'pictures' ? 'pictures' : 'list', devices, lowPercent: Number(p.lowPercent) || 20 };
-    },
-    command: async () => {},
-  },
-  {
-    id: 'media',
-    label: 'Now playing (Spotify & more)',
-    description: 'Album cover, title, progress bar and play / pause / skip. Works with Spotify and most players.',
-    icon: '🎵',
-    size: { w: 4, h: 2 },
-    params: [
-      { key: 'app', label: 'Player', type: 'select', optionsFrom: 'media.players', unknownSuffix: 'not running right now', default: 'auto', help: 'Pick the app to show. The list is what Windows sees right now (start the music first if it is missing). Automatic prefers a playing music app over a browser tab. Pear API adds the album plus like, shuffle and repeat buttons (connect it in Settings first).' },
-      { key: 'controls', label: 'Show play / pause / skip buttons', type: 'boolean', default: true },
-      { key: 'progress', label: 'Show the progress bar', type: 'boolean', default: true },
-    ],
-    defaults: { color: '#14261c' },
-    needs: (p) => (String(p.app) === 'pear' ? { pear: true } : { media: [String(p.app || 'auto')] }),
-    initState: () => ({}),
-    data: (ctx, button) => ctx.media(String(button.widget.params.app || 'auto')),
-    async command(ctx, button, st, cmd, arg) {
-      const map = { toggle: 'toggle', next: 'next', previous: 'previous', play: 'play', pause: 'pause', seek: 'seek', like: 'like', dislike: 'dislike', shuffle: 'shuffle', repeat: 'repeat' };
-      if (!map[cmd]) throw new Error(`Unknown media command "${cmd}"`);
-      await ctx.mediaControl(String(button.widget.params.app || 'auto'), map[cmd], arg);
-    },
-  },
-  {
-    id: 'twitch.ads',
-    category: 'Twitch',
-    label: 'Twitch ad timer',
-    description: 'Counts down to your next ad break. Tap to snooze it.',
-    icon: '📺',
-    size: { w: 2, h: 2 },
-    params: [{ key: 'tapAction', label: 'Tap does', type: 'select', default: 'snooze', options: [['snooze', 'Snooze the next ad'], ['none', 'Nothing (display only)']] }],
-    defaults: { color: '#3a1f6b' },
-    needs: () => ({ twitch: true, twitchAds: true }),
-    initState: () => ({}),
-    data: (ctx) => ctx.twitchAds(),
-    async command(ctx, button, st, cmd) {
-      if (cmd !== 'tap' || button.widget.params.tapAction === 'none') return;
-      await ctx.twitchApi((t) => t.snoozeAd());
-      ctx.refreshTwitch();
-    },
-  },
-  {
-    id: 'twitch.stream',
-    category: 'Twitch',
-    label: 'Twitch stream status',
-    description: 'Shows whether you are live, your viewer count and how long you have been streaming.',
-    icon: '🔴',
-    size: { w: 2, h: 1 },
-    params: [],
-    defaults: { color: '#3a1f6b' },
-    needs: () => ({ twitch: true, twitchStream: true }),
-    initState: () => ({}),
-    data: (ctx) => ctx.twitchStream(),
-    command: async () => {},
-  },
-];
+// Each plugin registers its own widgets (Starter: clock/timer/stopwatch/coin/dice/media; SteamVR: battery; Twitch: twitch.ads/twitch.stream)
+// by calling registerWidgets() below with an array in this same shape.
 
-const registry = new Map(defs.map((d) => [d.id, d]));
+const registry = new Map(); // widget type -> def, populated by registerWidgets() as plugins load
+
+// Adds (or replaces, for the same def object) widget definitions into the shared registry. `defsOrMap` is
+// either an array of defs (a plugin's own `widgets` list) or a Map already keyed by id (the plugin loader's).
+function registerWidgets(defsOrMap) {
+  const entries = defsOrMap instanceof Map ? defsOrMap.entries() : defsOrMap.map((d) => [d.id, d]);
+  for (const [id, d] of entries) registry.set(id, d);
+}
 
 function widgetCatalog() {
-  return defs.map((d) => ({
+  return [...registry.values()].map((d) => ({
     id: d.id, category: d.category || CATEGORY, label: d.label, description: d.description, icon: d.icon, size: d.size,
     params: d.params, defaults: d.defaults, hasFinishSteps: Boolean(d.hasFinishSteps),
+    // How a plugin's widget reacts to a tap: 'none' (default) | 'tap' | 'tap-hold' — its command(ctx, button, state, cmd) gets 'tap' / 'hold'.
+    interaction: ['tap', 'tap-hold'].includes(d.interaction) ? d.interaction : 'none',
   }));
 }
 
@@ -403,8 +151,13 @@ class WidgetRuntime extends EventEmitter {
   data(button) {
     const def = registry.get(button.widget.type);
     if (!def) return { unavailable: true, now: this.now() };
-    const st = this.states.get(button.id) || def.initState();
-    return { ...def.data(this.context(), button, st), now: this.now() };
+    try {
+      const st = this.states.get(button.id) || (def.initState ? def.initState() : {});
+      return { ...def.data(this.context(), button, st), now: this.now() };
+    } catch (err) {
+      // A widget from a plugin that throws shows as unavailable, with the reason, instead of breaking the page.
+      return { unavailable: true, error: err.message, now: this.now() };
+    }
   }
 
   async command(button, cmd, arg) {
@@ -422,4 +175,15 @@ class WidgetRuntime extends EventEmitter {
   }
 }
 
-module.exports = { WidgetRuntime, widgetCatalog, registry, rollDice, flipCoin, fillTemplate, timerDurationMs, parseNames, nameDevices, pictureFor, CATEGORY };
+// Assigned before the self-load below runs, so a plugin's own widgets.js can safely require this module for
+// rollDice/fillTemplate/etc. even while this file is still loading (a starter -> plugin-loader -> starter's
+// own widgets.js -> back here circular require would otherwise see an empty module.exports).
+module.exports = { WidgetRuntime, widgetCatalog, registry, registerWidgets, rollDice, flipCoin, fillTemplate, timerDurationMs, CATEGORY };
+
+// Widgets bundled with the app register themselves here at module load, exactly like the old static array
+// (so `require('./widgets')` alone, with no other module required first, is fully populated as before).
+// A running app additionally merges in the user's own plugins via actions/index.js's loadUserPlugins().
+{
+  const { builtinRegistry } = require('./plugin-loader');
+  for (const manifest of builtinRegistry().list()) if (manifest.widgets) registerWidgets(manifest.widgets);
+}

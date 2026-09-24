@@ -1,8 +1,9 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const { WebSocketServer } = require('ws');
-const { ObsClient, authString } = require('../src/core/obs');
-const { Providers } = require('../src/core/providers');
+const { ObsClient, authString } = require('../plugins/obs/client');
+const { PluginRuntime } = require('../src/core/plugin-runtime');
+const { registry } = require('../src/core/actions');
 const { StateHub } = require('../src/core/state');
 const { FakeHelper, waitFor } = require('./helpers');
 
@@ -107,9 +108,9 @@ test('obs: requests fail fast when not connected, and it reconnects after a drop
 test('providers: OBS state reaches the hub, follows events, and clears on disconnect', async () => {
   const srv = await mockObs();
   const hub = new StateHub();
-  const providers = new Providers({ helper: new FakeHelper(), hub });
-  providers.configure({ obs: { host: '127.0.0.1', port: srv.port, password: '' }, osc: { host: '127.0.0.1', sendPort: 9000, listenPort: 0, listen: false } });
-  providers.sync({ audio: false, process: false, obs: true, vrc: false, vrcParams: new Set() });
+  const providers = new PluginRuntime({ registry, helper: new FakeHelper(), hub });
+  providers.configure({ plugins: { obs: { host: '127.0.0.1', port: srv.port, password: '' } }, osc: { host: '127.0.0.1', sendPort: 9000, listenPort: 0, listen: false } });
+  providers.sync({ obs: true });
   await waitFor(() => hub.eval('obs.scene=Gaming') === true);
   assert.equal(hub.eval('obs.recording'), false);
   assert.equal(hub.eval('obs.replay'), false, 'replay buffer error becomes "off", not a crash');
@@ -122,7 +123,7 @@ test('providers: OBS state reaches the hub, follows events, and clears on discon
   const scenes = await providers.options('obs.scenes');
   assert.deepEqual(scenes.map((s) => s.value).sort(), ['Chatting', 'Gaming']);
   for (const s of srv.state.sockets) s.terminate();
-  providers.sync({ audio: false, process: false, obs: false, vrc: false, vrcParams: new Set() });
+  providers.sync({ obs: false });
   await waitFor(() => hub.eval('obs.recording') === undefined);
   providers.stop();
   srv.wss.close();
@@ -130,8 +131,8 @@ test('providers: OBS state reaches the hub, follows events, and clears on discon
 
 test('providers: asking for OBS scenes when OBS is down gives a helpful error', async () => {
   const hub = new StateHub();
-  const providers = new Providers({ helper: new FakeHelper(), hub });
-  providers.configure({ obs: { host: '127.0.0.1', port: 1, password: '' }, osc: { host: '127.0.0.1', sendPort: 9000, listenPort: 0, listen: false } });
+  const providers = new PluginRuntime({ registry, helper: new FakeHelper(), hub });
+  providers.configure({ plugins: { obs: { host: '127.0.0.1', port: 1, password: '' } }, osc: { host: '127.0.0.1', sendPort: 9000, listenPort: 0, listen: false } });
   await assert.rejects(providers.options('obs.scenes'), /not reachable/);
   providers.stop();
 });

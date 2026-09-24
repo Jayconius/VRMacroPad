@@ -6,7 +6,7 @@ const http = require('http');
 const crypto = require('crypto');
 const fs = require('fs');
 const path = require('path');
-const { SpotifyClient } = require('../src/core/spotify');
+const { SpotifyClient } = require('../plugins/spotify/client');
 const { SecretStore } = require('../src/core/secrets');
 const { createApp } = require('../src/core');
 const { tempDir, FakeHelper, waitFor } = require('./helpers');
@@ -289,7 +289,7 @@ test('app: the Like button, its lit-up state, and the now-playing widget heart',
   app.engine.updateConfig(cfg);
 
   await waitFor(() => app.hub.eval('spotify.liked') === false, 3000);
-  assert.equal(app.providers.status().spotify.status, 'connected');
+  assert.equal(app.providers.status().plugins.spotify.status, 'connected');
   assert.equal(app.engine.computeButtonStates().like.active, false);
   await waitFor(() => app.engine.computeWidgetData().np.available === true, 3000);
   assert.equal(app.engine.computeWidgetData().np.extras.liked, false);
@@ -334,9 +334,9 @@ test('settings: the Spotify client id is kept, trimmed, and never appears in an 
   cleanup.push(() => app.stop());
   await app.start();
   const cfg = JSON.parse(JSON.stringify(app.engine.config));
-  cfg.settings.spotify = { clientId: '   abc123  ' };
+  cfg.settings.plugins.spotify = { clientId: '   abc123  ' };
   app.engine.updateConfig(cfg);
-  assert.equal(app.engine.config.settings.spotify.clientId, 'abc123');
+  assert.equal(app.engine.config.settings.plugins.spotify.clientId, 'abc123');
   assert.equal(app.spotify.clientId, 'abc123');
   assert.equal(app.spotify.status, 'needs-auth');
   assert.ok(fs.existsSync(path.join(app.store.dir, 'config.json')));

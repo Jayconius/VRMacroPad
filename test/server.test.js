@@ -177,7 +177,7 @@ test('lock: a config sent by the UI is validated, not trusted', async () => {
   const res = await request(c, 'config.set', { config: { pages: [{ cols: 999, buttons: [{ id: 'x', x: 5000, w: 999, color: '<script>' }] }], settings: { theme: 'evil' } } });
   assert.equal(res.ok, true);
   const pushed = await waitFor(() => c.messages.filter((m) => m.t === 'config').at(-1));
-  assert.equal(pushed.config.pages[0].cols, 24);
+  assert.equal(pushed.config.pages[0].cols, 100);
   assert.equal(pushed.config.pages[0].buttons[0].color, '#3b4a63');
   assert.equal(pushed.config.settings.theme, 'dark');
   c.ws.close();
@@ -211,9 +211,9 @@ test('api: options, export without secrets, page switching, bad messages', async
   c.ws.send(JSON.stringify({ t: null }));
   assert.equal((await request(c, 'status.get')).ok, true, 'server survives garbage');
 
-  app.engine.patchSettings((s) => { s.obs.password = 'topsecret'; });
+  app.engine.patchSettings((s) => { s.plugins.obs.password = 'topsecret'; });
   const exported = await request(c, 'config.export');
-  assert.equal(exported.result.settings.obs.password, '');
+  assert.equal(exported.result.settings.plugins.obs.password, '');
 
   await request(c, 'edit.set', { on: true });
   const cfg = JSON.parse(JSON.stringify(app.engine.config));
@@ -277,13 +277,13 @@ test('window, links and Twitch sign-in: guarded messages', async () => {
   assert.deepEqual(seen.opened, ['https://www.twitch.tv/activate?public=true&device-code=ABCD']);
 
   // linking or unlinking an account needs the edit lock open
-  for (const t of ['twitch.connect', 'twitch.disconnect', 'twitch.check']) {
-    const r = await request(c, t);
-    assert.equal(r.ok, false, t);
-    assert.match(r.error, /locked/i, t);
+  for (const method of ['connect', 'disconnect', 'check']) {
+    const r = await request(c, 'plugin.call', { plugin: 'twitch', method });
+    assert.equal(r.ok, false, method);
+    assert.match(r.error, /locked/i, method);
   }
   await request(c, 'edit.set', { on: true });
-  const noId = await request(c, 'twitch.connect');
+  const noId = await request(c, 'plugin.call', { plugin: 'twitch', method: 'connect' });
   assert.equal(noId.ok, false);
   assert.match(noId.error, /Client ID/);
   assert.equal(app.twitch.status, 'off');

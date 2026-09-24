@@ -60,13 +60,13 @@ test('store: runtime state persists separately from config', () => {
 
 test('store: stripSecrets blanks the OBS password and secret params, and leaves the original alone', () => {
   const cfg = defaultConfig();
-  cfg.settings.obs.password = 'pw';
+  cfg.settings.plugins.obs.password = 'pw';
   cfg.pages[0].buttons[0].steps = [{ action: 'ha.service', delayMs: 0, params: { token: 'SECRET', domain: 'light' } }];
   const clean = stripSecrets(cfg, defs);
-  assert.equal(clean.settings.obs.password, '');
+  assert.equal(clean.settings.plugins.obs.password, '');
   assert.equal(clean.pages[0].buttons[0].steps[0].params.token, '');
   assert.equal(clean.pages[0].buttons[0].steps[0].params.domain, 'light');
-  assert.equal(cfg.settings.obs.password, 'pw');
+  assert.equal(cfg.settings.plugins.obs.password, 'pw');
   assert.equal(cfg.pages[0].buttons[0].steps[0].params.token, 'SECRET');
 });
 

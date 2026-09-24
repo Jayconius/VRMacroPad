@@ -1,0 +1,244 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>VR Macro Pad: push-button macros and live mini screens for Windows and VR</title>
+<meta name="description" content="VR Macro Pad is a free Windows app: a grid of big coloured buttons and live mini screens for your desktop, your stream and your VR headset. Works with SteamVR, OBS, VRChat, Twitch, Kick, YouTube, Discord, Spotify and more.">
+<meta property="og:title" content="VR Macro Pad">
+<meta property="og:description" content="Push-button macros and live mini screens for the desktop, your stream and VR.">
+<meta property="og:image" content="/banner.png">
+<meta property="og:type" content="website">
+<link rel="icon" type="image/png" href="/logo.png">
+<style>
+  :root {
+    color-scheme: dark;
+    --bg: #12151d; --panel: #1a1f2b; --panel-2: #232a39; --line: #2f384b;
+    --text: #e8ecf5; --muted: #a3adc4; --accent: #4c8dff; --green: #2f855a; --orange: #b7791f; --purple: #6b46c1;
+  }
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  body { margin: 0; font: 17px/1.65 system-ui, -apple-system, "Segoe UI", sans-serif; color: var(--text);
+    background: radial-gradient(1200px 600px at 85% -10%, #3a2a78 0%, transparent 60%), radial-gradient(900px 500px at -10% 10%, #1b3a66 0%, transparent 55%), var(--bg); }
+  a { color: #7ab0ff; }
+  img { max-width: 100%; height: auto; display: block; }
+  .wrap { max-width: 1080px; margin: 0 auto; padding: 0 20px; }
+
+  /* top bar */
+  header.top { position: sticky; top: 0; z-index: 10; backdrop-filter: blur(10px); background: rgba(18, 21, 29, .78); border-bottom: 1px solid var(--line); }
+  header.top .wrap { display: flex; align-items: center; gap: 22px; height: 64px; }
+  .brand { display: flex; align-items: center; gap: 12px; text-decoration: none; color: var(--text); font-weight: 700; font-size: 1.1rem; }
+  .brand img { width: 36px; height: 36px; border-radius: 9px; }
+  nav { margin-left: auto; display: flex; gap: 20px; flex-wrap: wrap; }
+  nav a { color: var(--muted); text-decoration: none; font-size: .95rem; }
+  nav a:hover { color: var(--text); }
+
+  /* hero */
+  .hero { padding: 64px 0 24px; text-align: center; }
+  .hero h1 { font-size: clamp(2.2rem, 5vw, 3.6rem); line-height: 1.1; margin: 0 0 14px; letter-spacing: -.02em; }
+  .hero p.lead { max-width: 680px; margin: 0 auto 24px; color: var(--muted); font-size: 1.2rem; }
+  .pills { display: flex; flex-wrap: wrap; gap: 10px; justify-content: center; margin: 0 0 30px; padding: 0; list-style: none; }
+  .pills li { padding: 6px 16px; border-radius: 999px; background: rgba(255, 255, 255, .07); border: 1px solid var(--line); font-size: .95rem; }
+  .shot { border-radius: 16px; border: 1px solid var(--line); box-shadow: 0 30px 80px rgba(0, 0, 0, .5); }
+  .hero .shot { width: 100%; max-width: 940px; margin: 0 auto; }
+
+  /* sections */
+  section { padding: 72px 0 8px; }
+  h2 { font-size: clamp(1.6rem, 3vw, 2.2rem); margin: 0 0 8px; letter-spacing: -.01em; }
+  .sub { color: var(--muted); max-width: 720px; margin: 0 0 32px; }
+  .grid { display: grid; gap: 16px; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); }
+  .card { background: var(--panel); border: 1px solid var(--line); border-radius: 16px; padding: 20px; }
+  .card .ic { display: inline-grid; place-items: center; width: 44px; height: 44px; border-radius: 12px; font-size: 1.4rem; margin-bottom: 10px; }
+  .card h3 { margin: 0 0 6px; font-size: 1.1rem; }
+  .card p { margin: 0; color: var(--muted); font-size: .97rem; }
+  .g { background: var(--green); } .b { background: var(--accent); } .o { background: var(--orange); } .p { background: var(--purple); }
+  .r { background: #c53030; } .t { background: #2c7a7b; }
+
+  .split { display: grid; gap: 32px; grid-template-columns: 1fr 1fr; align-items: center; }
+  @media (max-width: 800px) { .split { grid-template-columns: 1fr; } nav a:nth-child(n+3) { display: none; } }
+  .split ul { padding-left: 20px; color: var(--muted); }
+  .split li { margin: 6px 0; }
+  .split li b { color: var(--text); }
+
+  .platform { display: grid; gap: 16px; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); }
+  .platform .card ul { margin: 10px 0 0; padding-left: 18px; color: var(--muted); font-size: .96rem; }
+  .platform .card li { margin: 4px 0; }
+  .tag { display: inline-block; font-size: .8rem; padding: 2px 10px; border-radius: 999px; background: rgba(255,255,255,.08); color: var(--muted); margin-left: 8px; vertical-align: middle; }
+
+  .btn { display: inline-flex; align-items: center; gap: 10px; padding: 12px 22px; border-radius: 12px; font-weight: 600; text-decoration: none; border: 1px solid var(--line); color: var(--text); background: rgba(255,255,255,.06); }
+  .btn:hover { background: rgba(255,255,255,.12); }
+  .btn.primary { background: var(--green); border-color: transparent; color: #fff; box-shadow: 0 8px 24px rgba(47,133,90,.35); }
+  .btn.primary:hover { background: #38a169; }
+  .cta { display: flex; flex-wrap: wrap; gap: 12px; justify-content: center; margin: 0 0 32px; }
+  .top-cta { padding: 8px 16px; font-size: .95rem; border-radius: 10px; }
+  .dl { display: grid; gap: 16px; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); }
+  .dl .card h3 { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+  .dl .card .cta { justify-content: flex-start; margin: 16px 0 0; }
+  .note { background: var(--panel-2); border: 1px solid var(--line); border-left: 4px solid var(--accent); border-radius: 12px; padding: 16px 20px; color: var(--muted); }
+  .note b { color: var(--text); }
+
+  footer { margin-top: 72px; border-top: 1px solid var(--line); padding: 32px 0 48px; color: var(--muted); font-size: .95rem; }
+  footer .wrap { display: flex; flex-wrap: wrap; gap: 16px 32px; align-items: center; justify-content: space-between; }
+  footer .links a { margin-right: 20px; }
+</style>
+</head>
+<body>
+
+<header class="top">
+  <div class="wrap">
+    <a class="brand" href="/"><img src="/logo.png" alt="VR Macro Pad logo" width="36" height="36"><span>VR Macro Pad</span></a>
+    <nav>
+      <a href="#features">Features</a>
+      <a href="#vr">In VR</a>
+      <a href="#streaming">Streaming</a>
+      <a href="#plugins">Plugins</a>
+      <a href="#download">Download</a>
+      <a href="/privacy">Privacy</a>
+    </nav>
+    <a class="btn primary top-cta" href="#download">Download</a>
+  </div>
+</header>
+
+<main>
+  <div class="wrap hero">
+    <h1>Push-button macros and live mini screens,<br>for your desktop and your VR headset.</h1>
+    <p class="lead">A free Windows app: a grid of big coloured buttons that run macros, plus mini screens that show what is happening right now. Mute your mic, switch scenes, talk to your stream, run VRChat controls, all with one press.</p>
+    <ul class="pills">
+      <li>SteamVR</li><li>OBS</li><li>VRChat</li><li>Twitch</li><li>Kick</li><li>YouTube</li><li>Discord</li><li>Spotify</li><li>Voicemeeter</li>
+    </ul>
+    <div class="cta">
+      <a class="btn primary" href="https://github.com/Jayconius/VRMacroPad/releases/latest">⬇ Download for Windows</a>
+      <a class="btn" href="https://github.com/Jayconius/VRMacroPad">★ View on GitHub</a>
+    </div>
+    <img class="shot" src="/deck.png" alt="The VR Macro Pad window: coloured buttons for Mic, Gameplay, Chatting, Record, Clip it and Say hi, plus a clock, a break timer, a dice, a coin and a SteamVR battery screen" width="1280" height="780">
+  </div>
+
+  <section id="features">
+    <div class="wrap">
+      <h2>Everything on one pad</h2>
+      <p class="sub">Press a button and it does something. Buttons light up to match reality: your mic is muted, you are recording, chat is in emote-only mode. No scripting needed.</p>
+      <div class="grid">
+        <div class="card"><div class="ic g">🎙️</div><h3>Real macros</h3><p>Keyboard shortcuts, sequences with delays, audio and mic controls, app launching and more, chained as steps on one button.</p></div>
+        <div class="card"><div class="ic b">📺</div><h3>Live mini screens</h3><p>Clock, timers, dice, the song playing, your headset and tracker batteries, stream status and viewer counts, right on the pad.</p></div>
+        <div class="card"><div class="ic p">💡</div><h3>Buttons that know the state</h3><p>Colour, label and animation change with the real state of your mic, your stream or your player, so you always see what is on.</p></div>
+        <div class="card"><div class="ic o">🖼️</div><h3>Make it yours</h3><p>Any colour, your own pictures and GIFs, button effects like pulse, glow and heartbeat, and pages for every situation.</p></div>
+        <div class="card"><div class="ic t">📐</div><h3>Any size grid</h3><p>Set the number of rows and columns per page, and have the pad fit any window, from a small strip to a full wall of buttons.</p></div>
+        <div class="card"><div class="ic r">🧩</div><h3>Plugins</h3><p>Every service is a plugin you can switch on or off, and you can write your own. Each one keeps its own settings and login.</p></div>
+      </div>
+    </div>
+  </section>
+
+  <section id="vr">
+    <div class="wrap">
+      <div class="split">
+        <div>
+          <h2>A real SteamVR overlay</h2>
+          <p class="sub" style="margin-bottom:12px">Grab the pad, move it, resize it and pin it in the room or to your wrist, all from inside VR. Edit everything without taking the headset off.</p>
+          <ul>
+            <li><b>Float it</b> in front of you, in the room, or on your wrist.</li>
+            <li><b>Only when you look at it</b>, if you would rather it stay out of the way.</li>
+            <li><b>Edit inside VR</b> with SteamVR's keyboard.</li>
+            <li><b>No VR?</b> It works just as well on the desktop.</li>
+          </ul>
+        </div>
+        <img class="shot" loading="lazy" src="/vr-overlay.png" alt="VR Macro Pad as a SteamVR overlay: a deck floating in front of you, a copy on the wrist, and the editor in the SteamVR dashboard" width="1600" height="900">
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <div class="wrap">
+      <div class="split">
+        <img class="shot" loading="lazy" src="/buttons-only.png" alt="The pad in buttons-only mode over a wallpaper, with no window frame" width="1280" height="720">
+        <div>
+          <h2>Buttons only, when you want</h2>
+          <p class="sub" style="margin-bottom:12px">One key and the window frame disappears, leaving just your buttons floating over your game, your stream layout or your desktop. Press it again to bring the controls back.</p>
+          <ul>
+            <li><b>Not in the way:</b> clicking the pad never steals focus from your game.</li>
+            <li><b>Always on top,</b> if you want it that way.</li>
+            <li><b>Start with no window</b> and use it only in VR from the tray.</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section id="streaming">
+    <div class="wrap">
+      <h2>Made for streamers</h2>
+      <p class="sub">Streaming plugins put the things you reach for mid-stream on a button. Each one signs in with your own account, only ever acts on your own channel, and does nothing until you press a button or put a status screen on your pad.</p>
+      <div class="platform">
+        <div class="card">
+          <h3>💜 Twitch</h3>
+          <ul><li>Chat messages and announcements</li><li>Emote-only, followers-only, slow mode and shield mode</li><li>Ads: run one, snooze one, and an ad timer</li><li>Clips, stream markers, raids and shoutouts</li><li>Change your title and category</li></ul>
+        </div>
+        <div class="card">
+          <h3>🟢 Kick</h3>
+          <ul><li>Chat messages</li><li>Change your title and category</li><li>Run an ad break, and see how many are left</li><li>Live status and viewer count</li></ul>
+        </div>
+        <div class="card">
+          <h3>▶️ YouTube</h3>
+          <ul><li>Send a message to the live chat of your own stream</li><li>Go live and end your stream</li><li>Run an ad break</li><li>Change the title, description, category or visibility (public, unlisted, private) of your own stream</li><li>Live status, viewers, likes, stream health, and your subscriber and view counts</li></ul>
+        </div>
+        <div class="card">
+          <h3>🤖 Streamer.bot &amp; Discord</h3>
+          <ul><li>Run any of your Streamer.bot actions from a button</li><li>Post "I'm live" messages and screenshots to Discord</li><li>Discord mute, deafen and push-to-talk buttons</li><li>Show who last messaged you on Discord</li></ul>
+        </div>
+      </div>
+      <p class="sub" style="margin:24px 0 0"><b>YouTube and your data.</b> When you connect YouTube, you sign in on Google's own page and choose whether to allow access. VR Macro Pad uses that access only to do what is listed above, only for your own channel, and only when you press a button or place a status screen. Everything runs on your own computer: nothing is sent to the developer or to anyone but YouTube. Read the <a href="/privacy">privacy policy</a> for the details.</p>
+    </div>
+  </section>
+
+  <section id="plugins">
+    <div class="wrap">
+      <div class="split">
+        <img class="shot" loading="lazy" src="/plugin-in-action.png" alt="One button press sends a Discord message: the button is ready, it lights up and confirms, and the message appears in the channel" width="1800" height="600">
+        <div>
+          <h2>Plugins for everything</h2>
+          <p class="sub" style="margin-bottom:12px">Every service in VR Macro Pad is a plugin: a folder you can switch on, off or add. Each plugin brings its own buttons, mini screens and a settings card with its own login.</p>
+          <ul>
+            <li><b>Built in:</b> OBS, VRChat, SteamVR, Voicemeeter, Spotify, YouTube Music, Twitch, Kick, YouTube, Discord, Streamer.bot and a starter pack.</li>
+            <li><b>Write your own</b> with a simple guide and a worked example.</li>
+            <li><b>Nothing else touched:</b> a plugin that fails to load never stops the rest.</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section id="download">
+    <div class="wrap">
+      <h2>Get VR Macro Pad</h2>
+      <p class="sub">Free, for Windows 10 and 11. No account needed.</p>
+      <div class="dl">
+        <div class="card">
+          <h3>Download</h3>
+          <p>Choose the installer, or the portable file that runs from anywhere with nothing to install. Free, for Windows 10 and 11.</p>
+          <div class="cta">
+            <a class="btn primary" href="https://github.com/Jayconius/VRMacroPad/releases/latest">⬇ Download from GitHub</a>
+          </div>
+        </div>
+        <div class="card">
+          <h3>Open source</h3>
+          <p>The whole app is on GitHub: read the code, follow what is new, report a problem, or write a plugin of your own.</p>
+          <div class="cta">
+            <a class="btn" href="https://github.com/Jayconius/VRMacroPad">★ View on GitHub</a>
+          </div>
+        </div>
+      </div>
+      <div class="note" style="margin-top:16px">
+        <b>Windows warning.</b> If Windows SmartScreen says "unknown publisher" the first time you run it, choose <b>More info</b>, then <b>Run anyway</b>. It is open source, so you can read exactly what it does on <a href="https://github.com/Jayconius/VRMacroPad">GitHub</a>.
+      </div>
+    </div>
+  </section>
+</main>
+
+<footer>
+  <div class="wrap">
+    <div>&copy; VR Macro Pad. Made by Jayconius.</div>
+    <div class="links"><a href="https://github.com/Jayconius/VRMacroPad">GitHub</a><a href="https://github.com/Jayconius/VRMacroPad/releases/latest">Download</a><a href="/privacy">Privacy policy</a><a href="/terms">Terms of service</a><a href="mailto:jayconiusbis@gmail.com">Contact</a></div>
+  </div>
+</footer>
+
+</body>
+</html>

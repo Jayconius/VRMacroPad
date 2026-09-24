@@ -37,26 +37,26 @@ test('schema: garbage input yields a usable config', () => {
   for (const junk of [null, undefined, 5, 'x', [], { pages: 'no' }]) {
     const { config } = normalizeConfig(junk);
     assert.equal(config.pages.length, 1);
-    assert.equal(config.settings.obs.port, 4455);
+    assert.equal(config.settings.plugins.obs.port, 4455);
   }
 });
 
 test('schema: clamps values and rejects bad colors, triggers and confirm modes', () => {
   const { config } = normalizeConfig({
-    settings: { gap: 999, lock: { holdMs: 1, unlockMethod: 'nonsense' }, obs: { port: 'abc' } },
+    settings: { gap: 999, lock: { holdMs: 1, unlockMethod: 'nonsense' }, plugins: { obs: { port: 'abc' } } },
     pages: [{ cols: 999, rows: 0, buttons: [{ id: 'x', x: -5, y: 0, w: 999, h: 1, color: 'red', colorOn: '#ABCDEF', confirm: 'wat',
       triggers: [{ type: 'hotkey', accelerator: 'F13' }, { type: 'bogus' }, { type: 'time', at: '25:99' }, { type: 'state', key: 'obs.recording', becomes: 'x' }] }] }],
   });
   assert.equal(config.settings.gap, 40);
   assert.equal(config.settings.lock.holdMs, 300);
   assert.equal(config.settings.lock.unlockMethod, 'hold');
-  assert.equal(config.settings.obs.port, 4455);
+  assert.equal(config.settings.plugins.obs.port, 4455);
   const pg = config.pages[0];
-  assert.equal(pg.cols, 24);
+  assert.equal(pg.cols, 100);
   assert.equal(pg.rows, 1);
   const btn = pg.buttons[0];
   assert.equal(btn.x, 0);
-  assert.equal(btn.w, 24, 'width clamped to page');
+  assert.equal(btn.w, 100, 'width clamped to page');
   assert.equal(btn.color, '#3b4a63');
   assert.equal(btn.colorOn, '#abcdef');
   assert.equal(btn.confirm, 'none');
@@ -85,4 +85,13 @@ test('schema: "start with no window" is off by default, keeps true, and ignores 
   assert.equal(defaultConfig().settings.window.startHidden, false);
   assert.equal(normalizeConfig({ settings: { window: { startHidden: true } } }).config.settings.window.startHidden, true);
   assert.equal(normalizeConfig({ settings: { window: { startHidden: 'yes' } } }).config.settings.window.startHidden, false);
+});
+
+test('schema: a page can be 100 x 100, and fit-to-screen is on unless a page turns it off', () => {
+  const cfg = (p) => normalizeConfig({ pages: [p] }).config.pages[0];
+  const big = cfg({ cols: 100, rows: 100, buttons: [] });
+  assert.deepEqual([big.cols, big.rows, big.fit], [100, 100, true]);
+  assert.equal(cfg({ cols: 8, rows: 4, fit: false, buttons: [] }).fit, false);
+  assert.equal(cfg({ cols: 8, rows: 4, fit: 'no', buttons: [] }).fit, true, 'only a real false turns it off');
+  assert.equal(cfg({ cols: 5000, rows: 5000, buttons: [] }).cols, 100);
 });

@@ -9,8 +9,9 @@ export const state = {
   activePage: null,
   edit: { on: false, relockAt: 0, unlockMethod: 'hold' },
   status: {},
+  update: null, // the update checker's latest word (see update-dialog.js)
   log: [],
-  app: { version: '', overlayDefaults: {}, about: { author: '', website: '', github: '' }, devMode: false, platform: '', hasHost: false, twitchBuiltIn: false },
+  app: { version: '', overlayDefaults: {}, about: { author: '', website: '', github: '' }, devMode: false, platform: '', hasHost: false },
   running: new Set(),
 };
 
@@ -41,6 +42,15 @@ export function notify() {
 
 export function actionDef(id) {
   return state.catalog.actions.find((a) => a.id === id) || null;
+}
+
+// A plugin's status() shape varies (some use .state, some .status, the rest of the object is theirs to
+// define), so this is the one place that picks the single word describing its status dot.
+export function pluginStatus(id) {
+  return (state.status.plugins && state.status.plugins[id]) || { state: 'off' };
+}
+export function pluginDot(st) {
+  return (st && (st.state || st.status)) || 'off';
 }
 
 export function currentPage() {

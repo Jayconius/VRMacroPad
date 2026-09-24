@@ -4,7 +4,7 @@ const assert = require('node:assert/strict');
 const http = require('http');
 const fs = require('fs');
 const path = require('path');
-const { TwitchClient, SCOPES } = require('../src/core/twitch');
+const { TwitchClient, SCOPES } = require('../plugins/twitch/client');
 const { SecretStore } = require('../src/core/secrets');
 const { createApp } = require('../src/core');
 const { tempDir, FakeHelper, waitFor, sleep } = require('./helpers');
@@ -304,7 +304,7 @@ async function bootWithTwitch(base, buttons) {
   cleanup.push(() => app.stop());
   await app.start();
   const cfg = JSON.parse(JSON.stringify(app.engine.config));
-  cfg.settings.twitch.clientId = 'cid';
+  cfg.settings.plugins.twitch.clientId = 'cid';
   cfg.pages = [{ id: 'p', name: 'P', cols: 8, rows: 4, buttons: buttons.map((b, i) => ({ id: b[0], x: i % 8, y: Math.floor(i / 8), w: 1, h: 1, label: b[0], steps: [{ action: b[1], params: b[2] || {}, delayMs: 0 }] })) }];
   app.engine.updateConfig(cfg);
   const toasts = [];
@@ -405,7 +405,7 @@ test('twitch actions: when Twitch is not set up or connected, the error says wha
   await app.engine.press('c');
   assert.match(toasts.at(-1).text, /not set up.*Client ID/);
   const cfg2 = JSON.parse(JSON.stringify(app.engine.config));
-  cfg2.settings.twitch.clientId = 'cid';
+  cfg2.settings.plugins.twitch.clientId = 'cid';
   app.engine.updateConfig(cfg2);
   await app.engine.press('c');
   assert.match(toasts.at(-1).text, /not connected.*Settings/i);
@@ -465,4 +465,28 @@ test('twitch: a Client ID shipped with the app means users just press Connect; t
   bare.configure({ clientId: '' });
   assert.equal(bare.status, 'off');
   assert.equal(bare.info().hasBuiltIn, false);
+});
+
+test('twitch: "an ad is playing now" is true only while the last ad break is still within its length; snooze lights up before an ad', async () => {
+  const { s, server, base } = await fakeTwitch();
+  s.ads.next_ad_at = new Date(Date.now() + 3 * 60000).toISOString(); // an ad in 3 minutes: inside the 5 minute warning
+  s.ads.last_ad_at = new Date(Date.now() - 10000).toISOString();     // the last one started 10 s ago and lasts 60 s
+  const { app, engine, hub } = await bootWithTwitch(base, []);
+  const cfg = JSON.parse(JSON.stringify(engine.config));
+  cfg.pages[0].buttons = [
+    { id: 'run', x: 0, y: 0, w: 1, h: 1, steps: [{ action: 'twitch.adRun', params: { length: '30' }, delayMs: 0 }], state: { source: 'auto', key: '' }, triggers: [] },
+    { id: 'snooze', x: 1, y: 0, w: 1, h: 1, steps: [{ action: 'twitch.adSnooze', params: {}, delayMs: 0 }], state: { source: 'auto', key: '' }, triggers: [] },
+  ];
+  engine.updateConfig(cfg);
+  await waitFor(() => hub.eval('twitch.adRunning') === true, 4000);
+  assert.equal(engine.computeButtonStates().run.active, true, 'the Run ad button is lit while an ad is playing');
+  assert.equal(engine.computeButtonStates().snooze.active, true, 'the Snooze button is lit because an ad is coming up soon');
+  s.ads.last_ad_at = new Date(Date.now() - 5 * 60000).toISOString(); // that ad finished minutes ago
+  s.ads.next_ad_at = new Date(Date.now() + 40 * 60000).toISOString(); // and the next is far away
+  await app.providers.get('twitch').refresh();
+  await waitFor(() => hub.eval('twitch.adRunning') === false, 4000);
+  assert.equal(engine.computeButtonStates().run.active, false);
+  assert.equal(engine.computeButtonStates().snooze.active, false);
+  await app.stop();
+  server.close();
 });

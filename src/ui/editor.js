@@ -35,11 +35,36 @@ function defaultParams(def) {
 }
 
 // ---- action picker ----
+// Remembered on this device only: the "Recently used first" tick box and which things were picked lately.
+const PICKER_PREFS = 'vrmp.picker.v1';
+const RECENT_SHOWN = 6;
+// Where the list was (scroll position and search) when something was picked, so "Back to the list" can put you there again.
+let pickerMemory = null;
+const readPickerPrefs = () => {
+  try {
+    const p = JSON.parse(localStorage.getItem(PICKER_PREFS) || '{}');
+    return { on: Boolean(p.on), recent: Array.isArray(p.recent) ? p.recent.filter((x) => typeof x === 'string').slice(0, 30) : [] };
+  } catch { return { on: false, recent: [] }; }
+};
+const writePickerPrefs = (p) => { try { localStorage.setItem(PICKER_PREFS, JSON.stringify(p)); } catch { /* private window: it simply is not remembered */ } };
+const usedKey = (e) => `${e.kind}:${e.id}`;
+
 // onPick(def, kind): kind is 'action', 'widget' or null for a blank button.
-export function openActionPicker({ title = 'Choose an action', onPick, allowBlank = false, includeWidgets = false }) {
+export function openActionPicker({ title = 'Choose an action', onPick, allowBlank = false, includeWidgets = false, restore = false }) {
   const search = h('input', { type: 'search', placeholder: 'Search actions…', spellcheck: 'false' });
   const list = h('div', { class: 'picker-list' });
+  const prefs = readPickerPrefs();
+  const recentToggle = checkbox('Recently used first', prefs.on, (v) => { prefs.on = v; writePickerPrefs(prefs); render(); });
   let modal;
+  const choose = (a) => {
+    pickerMemory = { scrollTop: modal.body.scrollTop, search: search.value };
+    prefs.recent = [usedKey(a), ...prefs.recent.filter((k) => k !== usedKey(a))].slice(0, 30);
+    writePickerPrefs(prefs);
+    modal.close();
+    onPick(a, a.kind);
+  };
+  const item = (a) => h('button', { class: 'picker-item', onclick: () => choose(a) },
+    h('span', { class: 'picker-icon' }, a.icon), h('span', null, h('strong', null, a.label), h('small', null, a.description)));
   const render = () => {
     clear(list);
     const q = search.value.trim().toLowerCase();
@@ -49,7 +74,11 @@ export function openActionPicker({ title = 'Choose an action', onPick, allowBlan
       ...state.catalog.actions.map((a) => ({ ...a, kind: 'action' })),
     ];
     const actionGroups = new Set(state.catalog.actions.map((a) => a.category));
-    for (const cat of [...new Set(entries.map((e) => e.category))].sort((a, b) => Number(actionGroups.has(a)) - Number(actionGroups.has(b)))) groups.set(cat, []);
+    const categories = [...new Set(entries.map((e) => e.category))];
+    // "Mini screens & tools" (and any other widget-only heading) stays where it always was; every plugin's heading is A to Z.
+    const fixed = categories.filter((c) => !actionGroups.has(c));
+    const plugins = categories.filter((c) => actionGroups.has(c)).sort((a, b) => a.localeCompare(b, undefined, { sensitivity: 'base' }));
+    for (const cat of [...fixed, ...plugins]) groups.set(cat, []);
     for (const a of entries) {
       if (q && !`${a.label} ${a.description} ${a.category}`.toLowerCase().includes(q)) continue;
       groups.get(a.category).push(a);
@@ -59,17 +88,23 @@ export function openActionPicker({ title = 'Choose an action', onPick, allowBlan
       list.append(h('div', { class: 'picker-group' }, h('button', { class: 'picker-item', onclick: () => { modal.close(); onPick(null, null); } },
         h('span', { class: 'picker-icon' }, '⬜'), h('span', null, h('strong', null, 'Blank button'), h('small', null, 'Set everything up yourself')))));
     }
-    for (const [cat, items] of groups) {
-      list.append(h('div', { class: 'picker-group' }, h('h3', null, cat),
-        items.map((a) => h('button', { class: 'picker-item', onclick: () => { modal.close(); onPick(a, a.kind); } },
-          h('span', { class: 'picker-icon' }, a.icon), h('span', null, h('strong', null, a.label), h('small', null, a.description))))));
+    if (prefs.on && !q) {
+      const byKey = new Map(entries.map((e) => [usedKey(e), e]));
+      const recent = prefs.recent.map((k) => byKey.get(k)).filter(Boolean).slice(0, RECENT_SHOWN);
+      if (recent.length) list.append(h('div', { class: 'picker-group' }, h('h3', null, 'Recently used'), recent.map(item)));
     }
+    for (const [cat, items] of groups) list.append(h('div', { class: 'picker-group' }, h('h3', null, cat), items.map(item)));
     if (!groups.size) list.append(h('p', { class: 'muted' }, 'No actions match.'));
   };
   search.addEventListener('input', render);
-  modal = openModal({ title, body: [search, list], wide: true });
+  modal = openModal({ title, body: [h('div', { class: 'picker-tools' }, search, recentToggle), list], wide: true });
   render();
-  search.focus();
+  if (restore && pickerMemory) {
+    search.value = pickerMemory.search;
+    render();
+    modal.body.scrollTop = pickerMemory.scrollTop;
+    requestAnimationFrame(() => { modal.body.scrollTop = pickerMemory.scrollTop; }); // once the browser has laid the list out
+  } else search.focus();
   return modal;
 }
 
@@ -106,11 +141,12 @@ function fitSize(page, x, y, ignoreId, preferred = { w: 2, h: 2 }) {
   return { w: 1, h: 1 };
 }
 
-export function startNewButton(at) {
+export function startNewButton(at, restore = false) {
   openActionPicker({
     title: 'Add a button: what should it do?',
     allowBlank: true,
     includeWidgets: true,
+    restore,
     onPick: (def, kind) => {
       const page = currentPage();
       const isWidget = kind === 'widget';
@@ -130,7 +166,7 @@ export function startNewButton(at) {
         steps: def && !isWidget ? [{ action: def.id, params: defaultParams(def), delayMs: 0 }] : [],
         triggers: [], state: { source: isWidget ? 'none' : 'auto', key: '' }, confirm: d.confirm || 'none',
       };
-      openButtonEditor(draft, true);
+      openButtonEditor(draft, true, { onBack: () => startNewButton(at, true) });
     },
   });
 }
@@ -141,7 +177,7 @@ export function editButton(id) {
   if (b) openButtonEditor(clone(b), false);
 }
 
-function openButtonEditor(draft, isNew) {
+function openButtonEditor(draft, isNew, { onBack = null } = {}) {
   const page = currentPage();
   let tab = 'actions';
   const tabsEl = h('div', { class: 'tabs' });
@@ -411,6 +447,7 @@ function openButtonEditor(draft, isNew) {
   }
 
   const footer = [
+    onBack ? h('button', { class: 'btn-secondary', title: 'Go back to the list of things a button can do, exactly where you were', onclick: () => { modal.close(); onBack(); } }, '← Back to the list') : null,
     isNew ? null : h('button', { class: 'btn-danger', onclick: remove }, 'Delete'),
     isNew ? null : h('button', { class: 'btn-secondary', onclick: duplicate }, 'Duplicate'),
     h('span', { class: 'spacer' }),

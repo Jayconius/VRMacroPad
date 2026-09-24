@@ -1,0 +1,58 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 500" width="900" height="500" role="img" aria-labelledby="t d">
+  <title id="t">Which kind of plugin are you building?</title>
+  <desc id="d">A choice: no outside service means actions only; a service reached with a pasted key or URL is a manual-setup plugin; a service that needs you to sign in is a login plugin. Each points at a working example folder.</desc>
+  <style>
+    text { font-family: -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; }
+    .mono { font-family: ui-monospace, SFMono-Regular, Consolas, Menlo, monospace; }
+    .h { font-size: 22px; font-weight: 700; fill: #f2f5fa; }
+    .sub { font-size: 14px; fill: #9fb0c8; }
+    .t { font-size: 14.5px; fill: #c9d4e5; }
+    .q { font-size: 17px; font-weight: 700; fill: #f2f5fa; }
+    .k { font-size: 18px; font-weight: 700; }
+  </style>
+  <defs><marker id="a" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="8" markerHeight="8" orient="auto"><path d="M0 0 L10 5 L0 10z" fill="#9fb0c8"/></marker></defs>
+  <rect width="900" height="500" rx="18" fill="#101826"/>
+  <text x="36" y="52" class="h">Which kind of plugin are you building?</text>
+  <text x="36" y="76" class="sub">Start at the top. Every kind is the same three files; they differ in what runtime.js does.</text>
+
+  <rect x="290" y="98" width="320" height="52" rx="12" fill="#182236" stroke="#2b3b58"/>
+  <text x="450" y="130" text-anchor="middle" class="q">Does it talk to an outside service?</text>
+
+  <path d="M330 150 V186 H150 V206" stroke="#9fb0c8" stroke-width="2.5" fill="none" marker-end="url(#a)"/>
+  <text x="240" y="178" text-anchor="middle" class="t" style="font-size:13px">No</text>
+  <path d="M570 150 V186 H600 V206" stroke="#9fb0c8" stroke-width="2.5" fill="none" marker-end="url(#a)"/>
+  <text x="600" y="178" class="t" style="font-size:13px">Yes</text>
+
+  <!-- leaf 1 -->
+  <rect x="36" y="208" width="230" height="250" rx="14" fill="#45301f" stroke="#e8a45c" stroke-width="2"/>
+  <text x="151" y="242" text-anchor="middle" class="k" style="fill:#f2c48a">Actions only</text>
+  <text x="151" y="268" text-anchor="middle" class="t">Runs code on your PC:</text>
+  <text x="151" y="290" text-anchor="middle" class="t">open a file, run a script,</text>
+  <text x="151" y="312" text-anchor="middle" class="t">send keys, do some math.</text>
+  <text x="151" y="352" text-anchor="middle" class="t" style="font-weight:700;fill:#f2f5fa">No runtime needed.</text>
+  <text x="151" y="376" text-anchor="middle" class="t">plugin.js + actions.js</text>
+  <text x="151" y="426" text-anchor="middle" class="mono t" style="font-size:12.5px;fill:#f2c48a">start from the tutorial</text>
+
+  <!-- question 2 -->
+  <rect x="440" y="208" width="320" height="52" rx="12" fill="#182236" stroke="#2b3b58"/>
+  <text x="600" y="240" text-anchor="middle" class="q">Do you have to sign in?</text>
+  <path d="M520 260 V292 H400 V312" stroke="#9fb0c8" stroke-width="2.5" fill="none" marker-end="url(#a)"/>
+  <text x="440" y="284" text-anchor="middle" class="t" style="font-size:13px">No: paste a key or URL</text>
+  <path d="M700 260 V292 H760 V312" stroke="#9fb0c8" stroke-width="2.5" fill="none" marker-end="url(#a)"/>
+  <text x="790" y="284" text-anchor="middle" class="t" style="font-size:13px">Yes</text>
+
+  <!-- leaf 2 -->
+  <rect x="290" y="314" width="230" height="144" rx="14" fill="#1f3d34" stroke="#3fb88a" stroke-width="2"/>
+  <text x="405" y="346" text-anchor="middle" class="k" style="fill:#7fe0b8">Manual setup</text>
+  <text x="405" y="370" text-anchor="middle" class="t">A pasted webhook URL or</text>
+  <text x="405" y="391" text-anchor="middle" class="t">API key in Settings.</text>
+  <text x="405" y="430" text-anchor="middle" class="mono t" style="font-size:12.5px;fill:#7fe0b8">docs/example-plugin-discord</text>
+  <text x="405" y="448" text-anchor="middle" class="mono t" style="font-size:12.5px;fill:#7fe0b8">docs/example-plugin</text>
+
+  <!-- leaf 3 -->
+  <rect x="640" y="314" width="230" height="144" rx="14" fill="#232a5e" stroke="#5865f2" stroke-width="2"/>
+  <text x="755" y="346" text-anchor="middle" class="k" style="fill:#aab3ff">Account login</text>
+  <text x="755" y="370" text-anchor="middle" class="t">Connect button, approval,</text>
+  <text x="755" y="391" text-anchor="middle" class="t">saved login, auto-connect.</text>
+  <text x="755" y="438" text-anchor="middle" class="mono t" style="font-size:12.5px;fill:#aab3ff">docs/example-plugin-login</text>
+</svg>

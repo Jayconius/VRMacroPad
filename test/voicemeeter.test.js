@@ -87,14 +87,13 @@ test('voicemeeter helper (real): without Voicemeeter installed it says so instea
 // ---- actions ----
 function fakeVm(state = {}) {
   const vm = { calls: [], values: { ...state } };
-  vm.ctx = {
-    vm: async (op, args = {}) => {
-      vm.calls.push({ op, ...args });
-      if (op === 'get') return vm.values[args.name] ?? 0;
-      if (op === 'macro') return Boolean(vm.values[`macro${args.button}`]);
-      return true;
-    },
+  const call = async (op, args = {}) => {
+    vm.calls.push({ op, ...args });
+    if (op === 'get') return vm.values[args.name] ?? 0;
+    if (op === 'macro') return Boolean(vm.values[`macro${args.button}`]);
+    return true;
   };
+  vm.ctx = { plugin: (id) => (id === 'voicemeeter' ? { call } : null) };
   return vm;
 }
 const run = (id, p, vm) => defs.get(id).run(p, vm.ctx);
@@ -215,8 +214,8 @@ test('voicemeeter: buttons follow Voicemeeter, only the parameters buttons use a
     const polls = vmHelper.calls.filter((c) => c.op === 'poll');
     assert.deepEqual(polls.at(-1).names.sort(), ['Strip[0].Mute', 'Strip[3].Solo']);
     assert.deepEqual(polls.at(-1).macros, [7]);
-    assert.equal(app.providers.status().voicemeeter, 'connected');
-    assert.match(app.providers.status().voicemeeterInfo, /Banana/);
+    assert.equal(app.providers.status().plugins.voicemeeter.state, 'connected');
+    assert.match(app.providers.status().plugins.voicemeeter.info, /Banana/);
 
     const list = await app.providers.options('vm.devices');
     assert.deepEqual(list.map((o) => o.value), ['Headphones (Fake)', 'Mic (Fake)'], 'one entry per device name');
@@ -226,7 +225,7 @@ test('voicemeeter: buttons follow Voicemeeter, only the parameters buttons use a
     cfg.pages[0].buttons = [];
     app.engine.updateConfig(cfg);
     await waitFor(() => app.hub.get('vm.connected') === undefined, 3000);
-    assert.equal(app.providers.status().voicemeeter, 'off');
+    assert.equal(app.providers.status().plugins.voicemeeter.state, 'off');
   } finally { await app.stop(); }
 });
 
@@ -240,7 +239,7 @@ test('voicemeeter: when Voicemeeter is not running buttons show neutral and the 
     app.engine.updateConfig(cfg);
     await waitFor(() => app.hub.get('vm.connected') === false, 3000);
     assert.equal(app.hub.eval('vm.param=Strip[0].Mute'), undefined);
-    assert.equal(app.providers.status().voicemeeter, 'connecting');
-    assert.match(app.providers.status().voicemeeterError, /not running/);
+    assert.equal(app.providers.status().plugins.voicemeeter.state, 'connecting');
+    assert.match(app.providers.status().plugins.voicemeeter.error, /not running/);
   } finally { await app.stop(); }
 });

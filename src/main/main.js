@@ -436,6 +436,15 @@ async function smokeReport(url) {
   else console.log(JSON.stringify(facts, null, 2));
 }
 
+// How this copy is run decides how it can update: the portable exe leaves a note about where it really lives, an
+// installed copy is a packaged app without that note, and anything else (running from source) only gets the link.
+function updateEnv() {
+  if (!app.isPackaged) return { mode: 'manual' };
+  const downloadsDir = app.getPath('downloads');
+  if (process.env.PORTABLE_EXECUTABLE_DIR) return { mode: 'portable', portableDir: process.env.PORTABLE_EXECUTABLE_DIR, downloadsDir };
+  return { mode: 'installer', downloadsDir };
+}
+
 // ---- startup ----
 // Smoke runs use their own throwaway profile and skip the check; a normal launch must be the only one.
 const myAckFile = path.join(os.tmpdir(), `vrmd-ack-${process.pid}-${Date.now()}`);
@@ -464,6 +473,9 @@ if (!gotLock) {
           overlayCommand: async (name, args) => { if (!overlay) throw new Error('The overlay is not available'); return overlay.command(name, args); },
           overlayInfo: () => (overlay ? overlay.info() : { state: 'off' }),
           openExternal: (url) => { shell.openExternal(url); return true; },
+          quit: quitApp,
+          showFile: (f) => shell.showItemInFolder(f),
+          updateEnv: updateEnv(),
           // Windows encrypts these with your own account, so a copied file is useless elsewhere.
           secretBox: {
             available: () => safeStorage.isEncryptionAvailable(),

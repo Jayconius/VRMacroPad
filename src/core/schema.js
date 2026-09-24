@@ -7,7 +7,7 @@ const Effects = require('../shared/effects');
 const { NAME: IMAGE_NAME } = require('./images');
 
 const CONFIG_VERSION = 1;
-const LIMITS = { pages: 30, buttons: 200, steps: 30, triggers: 10, maxDelayMs: 600000 };
+const LIMITS = { pages: 30, buttons: 1000, steps: 30, triggers: 10, maxDelayMs: 600000 };
 const TRIGGER_TYPES = ['hotkey', 'processStart', 'processStop', 'state', 'time'];
 const CONFIRM_MODES = ['none', 'hold', 'double'];
 const HEX = /^#[0-9a-fA-F]{6}$/;
@@ -39,7 +39,49 @@ function color(v, fallback) {
   return typeof v === 'string' && HEX.test(v) ? v.toLowerCase() : fallback;
 }
 
-function defaultSettings() {
+// The registry normalizeConfig() reads plugin settings fields from, when the caller does not pass its own
+// (an app instance with user plugins passes its own full registry; everything else, including every
+// existing test, gets the plugins bundled with the app — which is exactly what those tests expect).
+function defaultRegistry() {
+  return require('./plugin-loader').builtinRegistry();
+}
+
+// A single settings field's raw value, coerced to its declared type. Same field shape as an action's
+// params (see docs/PLUGIN-GUIDE.md), so the same little vocabulary of types covers both.
+function normalizeSettingField(field, raw, fallback) {
+  if (field.type === 'number') return num(raw, field.min ?? -1e9, field.max ?? 1e9, fallback);
+  if (field.type === 'boolean') return bool(raw, fallback);
+  if (field.type === 'select' && field.options) return oneOf(raw, field.options.map((o) => o[0]), fallback);
+  if (field.type === 'text') return str(raw, 4000, fallback ?? '').trim();
+  return str(raw, 4000, fallback ?? '');
+}
+
+function pluginSettingDefault(field) {
+  if (field.default !== undefined) return field.default;
+  return field.type === 'boolean' ? false : field.type === 'number' ? 0 : '';
+}
+
+// One plugin's settings.plugins.<id> block: its own declared fields, plus (for the built-ins) the field
+// under its old top-level name, for configs saved before 3.0.
+const LEGACY_TOP_LEVEL = { obs: 'obs', twitch: 'twitch', spotify: 'spotify', pear: 'pear', steamvr: 'vr' };
+function canAutoConnect(manifest) {
+  return Boolean((manifest.connections || []).length && (manifest.clientMethods || []).includes('connect'));
+}
+function normalizePluginSettings(manifest, ownRaw, legacyRaw) {
+  const fields = manifest.settingsFields || [];
+  const src = (ownRaw && typeof ownRaw === 'object' && ownRaw) || (legacyRaw && typeof legacyRaw === 'object' && legacyRaw) || {};
+  // Every plugin gets "enabled" for free; a plugin with a connect() flow also gets "autoConnect" — reconnect
+  // (a saved session, not a fresh sign-in — that always needs a human) on startup, without waiting for a
+  // button to need it. See PluginRuntime.needsFor() for how this reaches the plugin's own sync(needs).
+  const out = { enabled: bool(src.enabled, true) };
+  if (canAutoConnect(manifest)) out.autoConnect = bool(src.autoConnect, false);
+  for (const f of fields) out[f.key] = normalizeSettingField(f, src[f.key], pluginSettingDefault(f));
+  return out;
+}
+
+function defaultSettings(registry = defaultRegistry()) {
+  const plugins = {};
+  for (const manifest of registry.list()) plugins[manifest.id] = normalizePluginSettings(manifest, undefined, undefined);
   return {
     theme: 'dark',
     accent: '#4c8dff',
@@ -47,30 +89,32 @@ function defaultSettings() {
     gap: 10,
     lock: { unlockMethod: 'hold', holdMs: 1200, autoRelockSec: 180, unlockHotkey: 'Ctrl+Alt+Shift+E' },
     window: { alwaysOnTop: false, nonActivating: true, frameless: true, cleanView: false, cleanViewHotkey: 'Ctrl+Alt+Shift+V', showInTaskbar: true, closeToTray: false, startHidden: false, width: 960, height: 640, x: null, y: null },
-    obs: { host: '127.0.0.1', port: 4455, password: '' },
+    // Shared OSC transport: VRChat's plugin listens on it, and any plugin (or the "send any OSC message"
+    // action) can send through it, so it is core, not owned by one plugin.
     osc: { host: '127.0.0.1', sendPort: 9000, listenPort: 9001, listen: true },
-    twitch: { clientId: '', adWarnMinutes: 5 },
-    spotify: { clientId: '' },
-    vr: { lowBatteryPercent: 15 },
-    pear: { host: '127.0.0.1', port: 26538 },
     server: { port: 17420 },
+    // Update checking is off until you turn it on (Settings → General). skipped: a version you said "skip" to.
+    updates: { check: false, skipped: '' },
     overlay: defaultOverlay(),
+    plugins,
   };
 }
 
-function mergeSettings(input) {
-  const d = defaultSettings();
+function mergeSettings(input, registry = defaultRegistry()) {
+  const d = defaultSettings(registry);
   const s = input && typeof input === 'object' ? input : {};
   const lock = s.lock || {};
   const win = s.window || {};
-  const obs = s.obs || {};
   const osc = s.osc || {};
-  const twitch = s.twitch || {};
-  const spotify = s.spotify || {};
-  const vr = s.vr || {};
-  const pear = s.pear || {};
   const server = s.server || {};
+  const updates = s.updates || {};
+  const rawPlugins = s.plugins && typeof s.plugins === 'object' ? s.plugins : {};
   const coord = (v) => (Number.isFinite(Number(v)) && v !== null ? Math.round(Number(v)) : null);
+  const plugins = {};
+  for (const manifest of registry.list()) {
+    const legacyKey = LEGACY_TOP_LEVEL[manifest.id];
+    plugins[manifest.id] = normalizePluginSettings(manifest, rawPlugins[manifest.id], legacyKey ? s[legacyKey] : undefined);
+  }
   return {
     theme: oneOf(s.theme, ['dark', 'light'], d.theme),
     accent: color(s.accent, d.accent),
@@ -96,27 +140,16 @@ function mergeSettings(input) {
       x: coord(win.x),
       y: coord(win.y),
     },
-    obs: {
-      host: str(obs.host, 200, d.obs.host) || d.obs.host,
-      port: num(obs.port, 1, 65535, d.obs.port),
-      password: str(obs.password, 200, ''),
-    },
     osc: {
       host: str(osc.host, 200, d.osc.host) || d.osc.host,
       sendPort: num(osc.sendPort, 1, 65535, d.osc.sendPort),
       listenPort: num(osc.listenPort, 1, 65535, d.osc.listenPort),
       listen: bool(osc.listen, d.osc.listen),
     },
-    twitch: {
-      clientId: str(twitch.clientId, 80, '').trim(),
-      adWarnMinutes: num(twitch.adWarnMinutes, 1, 60, d.twitch.adWarnMinutes),
-    },
-    spotify: { clientId: str(spotify.clientId, 80, '').trim() },
-    vr: { lowBatteryPercent: num(vr.lowBatteryPercent, 1, 90, d.vr.lowBatteryPercent) },
-    // Only a plain host name or address: this ends up inside a URL.
-    pear: { host: /^[A-Za-z0-9.-]{1,100}$/.test(pear.host || '') ? pear.host : d.pear.host, port: num(pear.port, 1, 65535, d.pear.port) },
     server: { port: num(server.port, 1024, 65535, d.server.port) },
+    updates: { check: bool(updates.check, d.updates.check), skipped: str(updates.skipped, 40, '').trim() },
     overlay: normalizeOverlay(s.overlay),
+    plugins,
   };
 }
 
@@ -155,8 +188,8 @@ function normalizeButton(b, used) {
     id,
     x: num(b.x, 0, 1000, 0),
     y: num(b.y, 0, 1000, 0),
-    w: num(b.w, 1, 24, 1),
-    h: num(b.h, 1, 16, 1),
+    w: num(b.w, 1, 100, 1),
+    h: num(b.h, 1, 100, 1),
     label: str(b.label, 60),
     labelOn: str(b.labelOn, 60),
     icon: str(b.icon, 12),
@@ -184,8 +217,9 @@ function normalizePage(p, usedPageIds, warnings) {
   const page = {
     id,
     name: str(p.name, 40, 'Page') || 'Page',
-    cols: num(p.cols, 1, 24, 8),
-    rows: num(p.rows, 1, 16, 5),
+    cols: num(p.cols, 1, 100, 8),
+    rows: num(p.rows, 1, 100, 5),
+    fit: p.fit !== false, // on unless turned off: the buttons shrink so the whole page always fits the window
     autoShowProcess: str(p.autoShowProcess, 120).toLowerCase(),
     buttons: [],
   };
@@ -214,22 +248,22 @@ function normalizePage(p, usedPageIds, warnings) {
   return page;
 }
 
-function normalizeConfig(input) {
+function normalizeConfig(input, registry = defaultRegistry()) {
   const warnings = [];
   const src = input && typeof input === 'object' ? input : {};
   const usedPageIds = new Set();
   let pages = (Array.isArray(src.pages) ? src.pages : []).slice(0, LIMITS.pages).map((p) => normalizePage(p, usedPageIds, warnings)).filter(Boolean);
   if (!pages.length) pages = [normalizePage({ name: 'Main', buttons: [] }, usedPageIds, warnings)];
-  return { config: { version: CONFIG_VERSION, settings: mergeSettings(src.settings), pages }, warnings };
+  return { config: { version: CONFIG_VERSION, settings: mergeSettings(src.settings, registry), pages }, warnings };
 }
 
 // A few harmless starter buttons so the first launch is not an empty grid.
-function defaultConfig() {
+function defaultConfig(registry = defaultRegistry()) {
   const btn = (x, y, w, h, label, icon, color, steps, extra = {}) => ({
     id: uid('b'), x, y, w, h, label, icon, color, steps: steps.map((s) => ({ delayMs: 0, params: {}, ...s })), ...extra,
   });
   return normalizeConfig({
-    settings: defaultSettings(),
+    settings: defaultSettings(registry),
     pages: [
       {
         name: 'Main',
@@ -257,7 +291,7 @@ function defaultConfig() {
         ],
       },
     ],
-  }).config;
+  }, registry).config;
 }
 
 module.exports = { CONFIG_VERSION, LIMITS, TRIGGER_TYPES, uid, defaultSettings, defaultConfig, normalizeConfig, mergeSettings };

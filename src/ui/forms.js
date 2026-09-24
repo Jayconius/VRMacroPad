@@ -95,7 +95,7 @@ export function optionsField({ kind, value, onChange, allowCustom = false, empty
       const id = `dl_${Math.random().toString(36).slice(2, 8)}`;
       const input = h('input', { type: 'text', value: value || '', list: id, placeholder: placeholder || 'Type or pick…', spellcheck: 'false' });
       input.addEventListener('input', () => onChange(input.value));
-      host.append(input, h('datalist', { id }, (list || []).map((o) => h('option', { value: o.value }, o.label))));
+      host.append(input, h('datalist', { id }, (list || []).map((o) => h('option', { value: o.value }, o.hint !== undefined ? o.hint : o.label))));
     } else {
       const select = h('select', null,
         emptyLabel || !value ? h('option', { value: '' }, emptyLabel || 'Choose…') : null,
@@ -200,6 +200,13 @@ export function buildParamForm(def, params, onChange) {
     for (const { p, el } of rows) el.hidden = !visible(p);
   }
   for (const p of def.params) {
+    // A "notice" is only a highlighted message (a warning, a tip): it holds no value and saves nothing.
+    if (p.type === 'notice') {
+      const el = h('div', { class: `param-notice ${p.level === 'info' ? 'info' : 'warn'}`, role: 'note' }, h('strong', null, p.title || (p.level === 'info' ? 'Good to know' : 'Careful')), h('span', null, p.text || ''));
+      rows.push({ p, el });
+      root.append(el);
+      continue;
+    }
     if (params[p.key] === undefined && p.default !== undefined) params[p.key] = p.default;
     let control;
     if (p.type === 'select' && p.optionsFrom) {

@@ -32,6 +32,14 @@ export function createGridView(container, { onEdit, onAddAt }) {
     const availH = container.clientHeight - 24;
     const byW = (availW - (page.cols - 1) * gap) / page.cols;
     const byH = (availH - (page.rows - 1) * gap) / page.rows;
+    if (page.fit) {
+      // Fit to screen: thin the gaps for a big page, then let the buttons get as small as they need to.
+      gap = Math.max(0, Math.min(gap, Math.floor(Math.min(availW / page.cols, availH / page.rows) / 6)));
+      const fw = (availW - (page.cols - 1) * gap) / page.cols;
+      const fh = (availH - (page.rows - 1) * gap) / page.rows;
+      cell = Math.max(4, Math.floor(Math.min(fw, fh)));
+      return;
+    }
     cell = Math.max(MIN_CELL, Math.floor(Math.min(byW, byH)));
   }
 
@@ -85,7 +93,7 @@ export function createGridView(container, { onEdit, onAddAt }) {
       button: b, params,
       send: (cmd, arg) => widgetCommand(b.id, cmd, arg),
       clock: () => Date.now() + state.clockOffset,
-    });
+    }, { known: (state.catalog.widgets || []).some((d) => d.id === b.widget.type) });
     if (w) widgetObjs.set(b.id, w);
     return w;
   }
@@ -118,7 +126,9 @@ export function createGridView(container, { onEdit, onAddAt }) {
 
   // Taps and long-presses on widgets. Media (and other 'custom') widgets have their own buttons inside.
   function wireWidget(el, b) {
-    const mode = INTERACTION[b.widget.type] || 'none';
+    const def = (state.catalog.widgets || []).find((d) => d.id === b.widget.type);
+    const mode = INTERACTION[b.widget.type] || (def && def.interaction) || 'none';
+    if (mode !== 'none') el.classList.add('tappable');
     if (mode === 'tap') { wireUse(el, b, () => widgetCommand(b.id, 'tap')); return; }
     if (mode !== 'tap-hold') return;
     let timer = null;

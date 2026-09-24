@@ -6,7 +6,7 @@ const fs = require('fs');
 const path = require('path');
 const http = require('http');
 const { createApp } = require('../src/core');
-const { pictureFor, nameDevices } = require('../src/core/widgets');
+const { pictureFor, nameDevices } = require('../plugins/steamvr/pictures');
 const { tempDir, FakeHelper } = require('./helpers');
 
 const cleanup = [];
@@ -92,7 +92,7 @@ test('simulator: a fresh file in the simulator format replaces the headset and n
     'DEMO-TRACKER-01': sim({ battery_pct: 40, tracking_ok: false }),
     'DEMO-LIGHTHOUSE-01': sim({ device_class: 'TrackingReference', model: 'Demo Lighthouse 1', battery_pct: null, tracking_ok: null }),
   });
-  await app.providers.pollVr();
+  await app.providers.get('steamvr').poll();
   const d = data();
   assert.equal(d.connected, true);
   assert.equal(d.simulated, true);
@@ -113,7 +113,7 @@ test('simulator: a fresh file in the simulator format replaces the headset and n
   assert.equal(app.hub.eval('vr.hmdWorn'), true);
   assert.equal(app.hub.eval('vr.device=DEMO-TRACKER-01'), true);
   assert.equal(app.hub.eval('vr.device=SOMETHING-ELSE'), false);
-  assert.equal(app.providers.status().steamvrSimulated, true);
+  assert.equal(app.providers.status().plugins.steamvr.simulated, true);
 });
 
 test('simulator: unticking the SteamVR Service row looks like SteamVR closing; a stale file is ignored', async () => {
@@ -125,7 +125,7 @@ test('simulator: unticking the SteamVR Service row looks like SteamVR closing; a
   delete noService.devices.__steamvr_service__;
   fs.writeFileSync(file, JSON.stringify(noService));
   realCalls = 0; // (the poll at startup ran before the file existed)
-  await app.providers.pollVr();
+  await app.providers.get('steamvr').poll();
   assert.equal(data().connected, false);
   assert.match(data().error, /not running/i);
   assert.equal(app.hub.eval('vr.connected'), false);
@@ -133,11 +133,11 @@ test('simulator: unticking the SteamVR Service row looks like SteamVR closing; a
 
   // the simulator was closed / crashed: the heartbeat stops, the file gets old, real SteamVR takes over again
   writeFake(dir, { 'DEMO-TRACKER-01': sim({}) }, { age: 10000 });
-  await app.providers.pollVr();
+  await app.providers.get('steamvr').poll();
   assert.equal(realCalls, 1);
   assert.equal(data().simulated, false);
   assert.equal(data().devices[0].serial, 'REAL');
-  assert.equal(app.providers.status().steamvrSimulated, false);
+  assert.equal(app.providers.status().plugins.steamvr.simulated, false);
 });
 
 test('simulator: a broken or odd file is ignored or tolerated instead of breaking the widget', async () => {
@@ -145,10 +145,10 @@ test('simulator: a broken or odd file is ignored or tolerated instead of breakin
   const { app, dir, data } = await boot({ show: ['hmd', 'controller'] }, { vrHelper: vr });
   const file = path.join(dir, 'fake_vr_signal.json');
   fs.writeFileSync(file, '{ not json');
-  await app.providers.pollVr();
+  await app.providers.get('steamvr').poll();
   assert.equal(data().devices[0].serial, 'REAL');
   fs.writeFileSync(file, `﻿${JSON.stringify({ timestamp: 1, devices: { X: 5, Y: null, __steamvr_service__: {}, Z: { device_class: 'Controller', battery_pct: '55', role: 'RIGHT' } } })}`);
-  await app.providers.pollVr();
+  await app.providers.get('steamvr').poll();
   assert.equal(data().simulated, true, 'a byte-order mark and junk entries are tolerated');
   assert.deepEqual(data().devices.map((x) => [x.serial, x.role, x.battery]), [['Z', 'right', 55]]);
 });
@@ -159,12 +159,12 @@ test('remembered devices: one that goes away is listed as off with its last leve
   let devices = [left, dev({ serial: 'T1', battery: 23 }), dev({ serial: 'T2', battery: 88 })];
   const vr = new FakeHelper({ snapshot: () => ({ connected: true, error: '', devices }) });
   const { app, data } = await boot({}, { vrHelper: vr });
-  await app.providers.pollVr();
+  await app.providers.get('steamvr').poll();
   assert.equal(data().devices.length, 3);
   assert.equal(app.hub.eval('vr.dropped'), false);
 
   devices = [left, devices[2]]; // T1 dropped out
-  await app.providers.pollVr();
+  await app.providers.get('steamvr').poll();
   const off = data().devices.find((x) => x.serial === 'T1');
   assert.equal(off.connected, false);
   assert.equal(off.battery, 23, 'keeps its last known level');
@@ -175,12 +175,12 @@ test('remembered devices: one that goes away is listed as off with its last leve
   assert.equal(app.hub.eval('vr.lowBattery'), false, 'an off device is not a low-battery warning');
 
   devices = [left, dev({ serial: 'T1', battery: 22 }), dev({ serial: 'T2', battery: 88 })]; // it came back
-  await app.providers.pollVr();
+  await app.providers.get('steamvr').poll();
   assert.equal(data().devices.find((x) => x.serial === 'T1').connected, true);
   assert.equal(app.hub.eval('vr.dropped'), false);
 
   devices = [left];
-  await app.providers.pollVr();
+  await app.providers.get('steamvr').poll();
   const cfg = JSON.parse(JSON.stringify(app.engine.config));
   cfg.pages[0].buttons[0].widget.params.showDropped = false;
   app.engine.updateConfig(cfg);
@@ -191,9 +191,9 @@ test('remembered devices: nothing is shown as off while SteamVR itself is not ru
   const dir = tempDir();
   let snap = { connected: true, error: '', devices: [dev({ serial: 'T1', battery: 30 })] };
   const first = await boot({}, { vrHelper: new FakeHelper({ snapshot: () => snap }), dir });
-  await first.app.providers.pollVr();
+  await first.app.providers.get('steamvr').poll();
   snap = { connected: false, error: 'SteamVR is not running', devices: [] };
-  await first.app.providers.pollVr();
+  await first.app.providers.get('steamvr').poll();
   assert.equal(first.data().connected, false);
   assert.deepEqual(first.data().devices, [], 'no ghost list while SteamVR is closed');
   assert.equal(first.app.hub.eval('vr.dropped'), false);
@@ -202,7 +202,7 @@ test('remembered devices: nothing is shown as off while SteamVR itself is not ru
   // next launch: the tracker is not switched on yet
   snap = { connected: true, error: '', devices: [dev({ class: 'hmd', serial: 'H', battery: 90 })] };
   const second = await boot({}, { vrHelper: new FakeHelper({ snapshot: () => snap }), dir });
-  await second.app.providers.pollVr();
+  await second.app.providers.get('steamvr').poll();
   const t1 = second.data().devices.find((x) => x.serial === 'T1');
   assert.ok(t1, 'a tracker seen last time is still listed');
   assert.equal(t1.connected, false);
@@ -213,7 +213,7 @@ test('remembered devices: nothing is shown as off while SteamVR itself is not ru
 test('remembered devices: simulated devices are never saved as if they were the real rig', async () => {
   const { app, dir } = await boot({});
   writeFake(dir, { 'DEMO-TRACKER-01': sim({}) });
-  await app.providers.pollVr();
+  await app.providers.get('steamvr').poll();
   const runtime = path.join(dir, 'runtime.json');
   const saved = fs.existsSync(runtime) ? fs.readFileSync(runtime, 'utf8') : '';
   assert.equal(saved.includes('DEMO-'), false);
@@ -223,7 +223,7 @@ test('remembered devices: simulated devices are never saved as if they were the 
 test('editor list: the "device is connected" trigger offers known devices', async () => {
   const vr = new FakeHelper({ snapshot: () => ({ connected: true, error: '', devices: [dev({ class: 'hmd', serial: 'H', model: 'Quest' }), dev({ class: 'other', serial: 'O' })] }) });
   const { app } = await boot({}, { vrHelper: vr });
-  await app.providers.pollVr();
+  await app.providers.get('steamvr').poll();
   assert.deepEqual(await app.providers.options('vr.devices'), [{ value: 'H', label: 'Quest (H)' }]);
 });
 

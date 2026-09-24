@@ -2,7 +2,7 @@
 //   update(data)  new data from the core (can be called often, must be cheap)
 //   tick()        runs ~5x a second so clocks, timers and progress bars move smoothly
 // ctx = { button, params, send(cmd, arg), clock() }  where clock() is the core's time in ms.
-import { h } from './util.js';
+import { h, clear } from './util.js';
 import * as net from './net.js';
 
 // How a widget reacts to pointers in use mode: 'none' | 'tap' | 'tap-hold' | 'custom'.
@@ -431,14 +431,51 @@ function streamWidget(ctx) {
   return { el, update(data) { d = data; draw(); }, tick: draw };
 }
 
+// ---- generic widget: what a plugin's widget looks like when the app has no special picture for it ----
+// The widget's data() returns any of: { title, value, subtitle, progress (0..1), status ('ok'|'warn'|'error'),
+// items: [{ label, value }], error }. Everything is optional; unknown fields are ignored. See docs/PLUGIN-GUIDE.md.
+function genericWidget(ctx) {
+  const value = h('div', { class: 'w-big' });
+  const sub = h('div', { class: 'w-sub' });
+  const barFill = h('i');
+  const bar = h('div', { class: 'w-bar', hidden: true }, barFill);
+  const items = h('div', { class: 'w-items' });
+  const el = inner('w-generic', caption(ctx), value, sub, bar, items);
+  return {
+    el,
+    update(d) {
+      if (d.unavailable) {
+        value.textContent = '';
+        sub.textContent = d.error ? `Widget problem: ${d.error}` : 'Not available right now';
+        bar.hidden = true;
+        clear(items);
+        el.dataset.status = 'error';
+        return;
+      }
+      const text = (v) => (v === undefined || v === null ? '' : String(v));
+      value.textContent = text(d.value);
+      value.hidden = d.value === undefined || d.value === null || d.value === '';
+      sub.textContent = text(d.subtitle || d.title || '');
+      const p = Number(d.progress);
+      bar.hidden = !Number.isFinite(p) || d.progress === null || d.progress === undefined;
+      if (!bar.hidden) barFill.style.width = `${Math.max(0, Math.min(1, p)) * 100}%`;
+      clear(items);
+      for (const it of Array.isArray(d.items) ? d.items.slice(0, 12) : []) items.append(h('div', { class: 'w-item' }, h('span', null, text(it && it.label)), h('strong', null, text(it && it.value))));
+      el.dataset.status = ['ok', 'warn', 'error'].includes(d.status) ? d.status : '';
+    },
+    tick() {},
+  };
+}
+
 const FACTORIES = {
   clock: clockWidget, timer: timerWidget, stopwatch: stopwatchWidget, coin: coinWidget, dice: diceWidget,
   battery: batteryWidget, media: mediaWidget, 'twitch.ads': adsWidget, 'twitch.stream': streamWidget,
 };
 
-// Returns null for a widget type this version does not know.
-export function createWidget(type, ctx) {
-  const make = FACTORIES[type];
+// Returns null for a widget type this version does not know. A type the core knows about (a plugin's widget,
+// listed in the catalog) but the app has no special picture for is drawn by the generic widget above.
+export function createWidget(type, ctx, { known = false } = {}) {
+  const make = FACTORIES[type] || (known ? genericWidget : null);
   if (!make) return null;
   const w = make(ctx);
   w.tick();

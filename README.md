@@ -16,31 +16,46 @@ Use it on your desktop, or float it in VR as a real **SteamVR overlay**.
 [![Electron](https://img.shields.io/badge/Electron-33-47848f?style=flat-square&logo=electron&logoColor=white)](https://www.electronjs.org)
 [![Made for VR](https://img.shields.io/badge/made%20for-VR-c53030?style=flat-square)](#-use-it-in-vr)
 
+[Website](https://vrmacropad.jayconius.com) · [Download](https://github.com/Jayconius/VRMacroPad/releases/latest) · [Build a plugin](docs/BUILD-A-PLUGIN.md) · [Full guide](docs/GUIDE.md)
+
 </div>
 
 ---
 
-<p align="center"><img src="docs/images/vr-overlay.png" alt="VR Macro Pad 2.0 as a SteamVR overlay: a deck floating in front of you, a copy on the wrist, and the editor in the SteamVR dashboard" width="100%"></p>
+<p align="center"><img src="docs/images/vr-overlay.png" alt="VR Macro Pad as a SteamVR overlay: a deck floating in front of you, a copy on the wrist, and the editor in the SteamVR dashboard" width="100%"></p>
 
 ## ✨ What is it?
 
-A grid of big, colored buttons that run macros, plus **mini screens** that show live information (SteamVR battery, the song playing, your Twitch ad timer, a clock, dice...). Press a button and it mutes your mic, switches your OBS scene, sends a Twitch chat message, changes your Voicemeeter volume, jumps in VRChat, and much more.
+A grid of big, colored buttons that run macros, plus **mini screens** that show live information (SteamVR battery, the song playing, your stream's ad timer and viewers, a clock, dice...). Press a button and it mutes your mic, switches your OBS scene, sends a chat message on Twitch, Kick or YouTube, changes your Voicemeeter volume, posts "I'm live" to Discord, jumps in VRChat, and much more.
 
-**New in 2.0: it is a native SteamVR overlay.** Grab it, move it, resize it, snap it to your wrist, or leave it in the room, all from inside VR, and edit everything without taking the headset off. No VR? It works just as well on a desktop window (and you can hide that window if you only use VR).
+It is a **native SteamVR overlay**: grab it, move it, resize it, snap it to your wrist, or leave it in the room, all from inside VR, and edit everything without taking the headset off. No VR? It works just as well as a desktop window (and you can hide that window if you only use VR).
 
 <p align="center"><img src="docs/images/deck.png" alt="The VR Macro Pad window with buttons, clock, timer, dice, coin and a SteamVR battery screen" width="90%"></p>
 
-## 🆕 What's new in 2.0
+## 🆕 What's new in 3.0
 
-* 🥽 **Native SteamVR overlay**: in front of you, in the room, or on your wrist; grab, resize, pin, "only when I look at it"; works with any headset that runs through SteamVR. [Read more](docs/VR-OVERLAY.md)
-* 🧭 **An entry in the SteamVR dashboard** with controls (reset position / size, dim the view, turn off) and a **full editor inside VR** (with SteamVR's keyboard).
-* ✨ **Button effects**: pulse, breathe, flash, glow, ripple, heartbeat, shake, bounce, hazard stripes and color cycle, for the normal and the active state.
-* 🖼️ **Your own pictures and GIFs** on buttons, a different one for each state.
-* 🎚️ **Voicemeeter**: mute / solo / route strips and buses, gain and fades, macro buttons, devices, per-app volume, any script.
-* 🛠️ **SteamVR functions**: supersampling, motion smoothing, headset brightness, **dim the view** (any headset), play-area bounds, performance graph, recenter.
-* 👾 **More VRChat**: game controls, walk and turn, chatbox with the song or the time, avatar parameter steps, any OSC message, AFK / seated / VR-mode triggers.
-* 🫥 **Start with no window** (settings or tray) for VR-only users.
-* 🐛 Fixed: audio buttons (mic mute, volume, device switch) showed a "Helper timed out" error after 8 seconds even though they worked; the SteamVR battery could not connect when no VR game was running.
+**Everything is a plugin now.** OBS, Twitch, VRChat, Spotify, SteamVR, Voicemeeter and the rest were moved out of the app's core into plugins that you can switch on and off, and you can write your own.
+
+<p align="center"><img src="docs/images/plugins.png" alt="Every bundled plugin: Discord, Discord Notifications, Kick, OBS, YouTube Music, Spotify, SteamVR, Streamer.bot, Twitch, Voicemeeter, VRChat and YouTube" width="90%"></p>
+
+* 🧩 **A real plugin system.** A plugin is a folder with a few small JavaScript files: no build step, no touching the app. Drop it in, restart, and it has its own settings card, actions, mini screens, sign-in and connection status. Start with the step-by-step tutorial: **[Build your own plugin](docs/BUILD-A-PLUGIN.md)**.
+* 💬 **Discord** (new): post "I'm live" messages, cards and screenshots through a webhook, share a new Steam screenshot or your last VRChat photo, and press your Discord mute / deafen / push-to-talk shortcuts.
+* 🔔 **Discord Notifications** (new): mini screens that show who last messaged you, with filters for DMs, @everyone, @you and server events, and buttons that light up on a new message.
+* 🟢 **Kick** (new): chat, title and category, ad breaks and timeouts, live status and viewers, through Kick's official API. Press **Connect** and log in on Kick.
+* 🤖 **Streamer.bot** (new): run your Streamer.bot actions from a button (emote-only, slow mode, clear chat, anything you built), by name and grouped like in Streamer.bot itself. It uses Streamer.bot's normal WebSocket server, so it works with the default settings and no password.
+* ▶️ **YouTube** (new): live chat, go live and end stream, ad breaks, title, description and category, public / unlisted / private, plus live-status and channel-number mini screens. See the note below about signing in.
+* 📐 **Any grid size**, up to 100 × 100, with **"Fit the whole page on screen"** so a big grid shrinks to the window instead of scrolling.
+* ↩️ **A Back button in the action picker**, so after picking something you land where you were in the long list.
+* 🔄 **Optional update check** (off by default): Settings → General → *Check for updates*. When a new version is out you get a box with a link, a **Download** button and a **Skip** button. Portable copies save the new exe next to the old one; installed copies can install it and restart for you.
+* 🔌 **One connections icon** in the top bar (dot and count) that opens a list, instead of one chip per plugin.
+* 📖 **"Instructions" buttons** on plugins that need a one-time setup, with numbered steps, links that open in your browser, and Copy buttons.
+* 🎙️ Mic and speaker buttons tied to a device now follow that device's real Windows mute state.
+* 🌐 A website with the privacy policy and terms: [vrmacropad.jayconius.com](https://vrmacropad.jayconius.com).
+
+> [!NOTE]
+> **YouTube sign-in:** the one-click *Log in with Google* is **not available yet**. It is waiting for Google to verify the app, which I can't rush. **The YouTube plugin still works today**: open Settings → Plugins → YouTube, press **Instructions**, and follow the steps to make your own free Google app (about five minutes, no cost), then paste its Client ID and Secret. Once Google verifies the app, it will become a single button.
+
+Everything from 2.0 is still here: the native SteamVR overlay with its dashboard entry and in-VR editor, button effects, your own pictures and GIFs, Voicemeeter, the SteamVR functions, VRChat OSC, and the buttons-only view. [VR overlay guide](docs/VR-OVERLAY.md)
 
 ## 📥 Download
 
@@ -52,6 +67,7 @@ A grid of big, colored buttons that run macros, plus **mini screens** that show 
 > [!NOTE]
 > The exes are not code-signed yet, so Windows SmartScreen may say *"unknown publisher"*. Click **More info → Run anyway**.
 > The first start takes a few seconds while it builds its small Windows helper programs.
+> Your layout and settings live in `%APPDATA%\VR Macro Pad`, so updating (or switching between installer and portable) keeps them.
 
 ## 🚀 Quick start
 
@@ -69,8 +85,12 @@ A grid of big, colored buttons that run macros, plus **mini screens** that show 
 | 🥽 **SteamVR** | start / quit / restart, battery on a mini screen, supersampling, motion smoothing, brightness, dim the view, play-area bounds, performance graph, recenter |
 | 🎚️ **Voicemeeter** | mute / solo / route, gain and fades, macro buttons, recorder, audio devices, per-app volume, any script |
 | 🎬 **OBS** | switch scene, record, stream, save replay, mute a source |
-| 👾 **VRChat** | mic mute, chatbox (with song / time), avatar parameters and steps, game controls, walk / turn, any OSC message (over OSC) |
+| 👾 **VRChat** | mic mute, chatbox (with song / time), avatar parameters and steps, game controls, walk / turn, any OSC message |
 | 💜 **Twitch** | chat messages, emote-only, followers-only, shield mode, ads, clip, raid, title... |
+| 🟢 **Kick** | chat, title and category, ad breaks, timeouts |
+| ▶️ **YouTube** | live chat, go live / end stream, ad breaks, title / description / category, public / unlisted / private |
+| 🤖 **Streamer.bot** | run any of your Streamer.bot actions |
+| 💬 **Discord** | post messages, cards and screenshots, share a Steam screenshot or VRChat photo, mute / deafen / push-to-talk |
 | 🎵 **Spotify** | play / skip, shuffle, repeat, seek, volume, and Like |
 | ▶️ **YouTube Music** | through [Pear Desktop](https://github.com/pear-devs/pear-desktop): like, shuffle, repeat, volume |
 | 🏠 **Web & smart home** | webhooks, Home Assistant |
@@ -87,7 +107,8 @@ Buttons that show live information instead of just running steps:
 | 🪙 **Coin flip**, 🎲 **Dice** | d4 to d100, advantage / disadvantage, and they can post the result to Twitch chat |
 | 🔋 **SteamVR battery** | headset, controllers, trackers and base stations, as a list or as **pictures** |
 | 🎶 **Now playing** | album cover, title, progress, controls. Spotify and most players |
-| 📺 **Twitch ad timer / stream status** | countdown to your next ad, live badge, viewers, uptime |
+| 📺 **Stream status** | Twitch, Kick and YouTube: live badge, viewers, uptime, and the countdown to your next ad |
+| 🔔 **Discord messages** | who last messaged you, and buttons that light up on a new one |
 
 ## 🫥 Buttons only (see-through)
 
@@ -106,17 +127,23 @@ It works next to XSOverlay and OVR Toolkit and with any SteamVR headset (Quest o
 Prefer a window capture? The desktop window still works with **OVR Toolkit / XSOverlay / Desktop+**, and clicking it does **not** steal focus from your game.
 
 <details>
-<summary><b>🔌 Setting up OBS, VRChat, Twitch, Spotify Like, Pear...</b></summary>
+<summary><b>🔌 Setting up OBS, VRChat, Twitch, Kick, YouTube, Streamer.bot, Discord, Spotify Like, Pear...</b></summary>
 
 <br>
 
+Open **Settings → Plugins** and expand the plugin. Ones that need a one-time setup have an **Instructions** button.
+
 | | How |
 |---|---|
-| **OBS** | Tools → WebSocket Server Settings → enable. Enter the port and password in Settings → Connections. |
+| **OBS** | Tools → WebSocket Server Settings → enable. Enter the port and password on the OBS card. |
 | **VRChat** | Action Menu → Options → OSC → Enabled. |
-| **Twitch** | Settings → Connections → **Connect Twitch**, then approve on twitch.tv. Nothing else to set up. |
+| **Twitch** | **Connect Twitch**, then approve on twitch.tv. Nothing else to set up. |
+| **Kick** | **Connect Kick**, then log in and approve on kick.com. Nothing else to set up. |
+| **YouTube** | Not one-click yet (Google's verification is pending). Press **Instructions** on the YouTube card, make your own free Google app, paste its Client ID and Secret, then **Connect YouTube**. |
+| **Streamer.bot** | In Streamer.bot: Servers/Clients → WebSocket Server → start it (the defaults are fine). Then the plugin lists your actions. Only fill in a password if you turned on *Authentication*. |
+| **Discord** | Channel settings → Integrations → Webhooks → copy the webhook URL into the Discord card. The mute / deafen / push-to-talk buttons press the shortcuts you set in Discord. |
 | **Spotify** | Play, skip, shuffle, repeat, seek and volume need **no setup and no login**. *Like* needs a one-time connection with your own Spotify developer app (see the [guide](docs/GUIDE.md#setting-up-the-integrations)). |
-| **YouTube Music** | In Pear: Plugins → API Server → enable. Then Settings → Connections → **Connect Pear**. |
+| **YouTube Music** | In Pear: Plugins → API Server → enable. Then **Connect Pear**. |
 | **SteamVR** | Nothing. It only looks at SteamVR when something needs it, and never starts it. |
 | **Voicemeeter** | Install [Voicemeeter](https://voicemeeter.com) (Standard, Banana or Potato) and start it. Nothing to configure. |
 
@@ -125,17 +152,30 @@ Prefer a window capture? The desktop window still works with **OVR Toolkit / XSO
 ## 🔒 Privacy and safety
 
 - Everything stays on your PC. The app runs a small web server on `127.0.0.1` only, protected by a secret token.
-- Twitch and Spotify logins are stored **encrypted with your Windows account**, never in your layout file, so sharing a layout never leaks them.
+- Logins (Twitch, Spotify, Kick, YouTube...) are stored **encrypted with your Windows account**, never in your layout file, so sharing a layout never leaks them. The one exception: a *Client ID / Secret* you type into a plugin's settings box is saved in your settings file in plain text (and is left out when you export a layout).
+- Kick's and YouTube's one-click sign-in goes through a tiny free relay that only swaps the sign-in code for a token (those services need a secret the app can't safely carry). It stores nothing. Details: [Privacy policy](https://vrmacropad.jayconius.com/privacy.html).
+- The update check is **off by default**. When on, it asks GitHub for the latest release number and nothing else, and it downloads only from this project's releases, verifying size and checksum first.
 - Editing (and linking accounts) is locked by default and can be limited to a hotkey or the tray menu.
 
 ## ⚠️ Honest limits
 
 - **Windows only.**
+- **YouTube's one-click sign-in is not available yet** (waiting on Google's app verification). Use your own Google app for now (Instructions button). Once verified, anyone will be able to log in with one click, and it will still show Google's normal permission screen.
+- The YouTube plugin has no actions that target one viewer (bans, timeouts) on purpose, and Kick has no ban / unban either: they are slow and error-prone to do from inside VR.
 - Tried on real hardware: the overlay, the dashboard entry and editor. **Not tried on real hardware yet:** the SteamVR battery screen, Voicemeeter (built against VB-Audio's official documentation and a built-in test double), headset brightness (depends on the headset's driver; "Dim the view" works everywhere), and the SteamVR keyboard in the VR editor. Reports welcome!
 - Spotify **Like** talks to Spotify's Web API, which (since Feb 2026) only lets a development-mode app work while its owner has Premium, for up to 5 people. So each person uses their own Client ID.
 - Keystrokes can't be sent into programs running as administrator unless VR Macro Pad runs as administrator too.
 - The overlay needs SteamVR. There are no controller bindings yet (grab and click use the laser and trigger).
+- The "install and restart" update path (installed copies) has had less real-world testing than the rest; if it ever misbehaves, download the Setup from the release page and run it yourself.
 - OVR Advanced Settings cannot be controlled from other apps, so its features are done directly where SteamVR allows (supersampling, brightness, bounds...). VRChat's web API (friends, status) is not used.
+
+## 🧩 Write your own plugin
+
+Every integration above is a plugin, and yours works exactly the same way: a folder with a few small JavaScript files, no build step. Two guides:
+
+- 📘 **[Build your own plugin](docs/BUILD-A-PLUGIN.md)**: a step-by-step tutorial (a real Discord webhook example), a cookbook (settings, logins, polling, mini screens, saving data) and a FAQ. Also as a [single web page](docs/BUILD-A-PLUGIN.html).
+- 📗 **[Plugin reference](docs/PLUGIN-GUIDE.md)**: every field of `plugin.js`, the runtime API, and how the app loads plugins.
+- Working examples live in [`docs/example-plugin`](docs/example-plugin), [`docs/example-plugin-discord`](docs/example-plugin-discord) and [`docs/example-plugin-login`](docs/example-plugin-login) (a full sign-in flow against a fake service).
 
 ## 🛠️ Build it yourself
 
@@ -144,11 +184,13 @@ git clone https://github.com/Jayconius/VRMacroPad.git
 cd VRMacroPad
 npm install
 npm start          # run it
-npm test           # 217 tests
+npm test           # 336 tests
 npm run dist       # build the installer and portable exe into dist/
 ```
 
 Needs [Node.js](https://nodejs.org). The full guide (every setting, how to add an action or a mini screen) is in **[docs/GUIDE.md](docs/GUIDE.md)**.
+
+Two files are deliberately **not** in the repository: the address of the private sign-in relay for Kick and YouTube (`plugins/kick/kick-app.json`, `plugins/youtube/youtube-app.json`; examples sit next to them). Without them, a source build still works, and Kick / YouTube use your own developer app.
 
 ## 🙏 Credits
 
@@ -157,12 +199,13 @@ Needs [Node.js](https://nodejs.org). The full guide (every setting, how to add a
 - The device pictures come from the author's other app, [OhFudgeMyBatteryChat](https://github.com/Jayconius/OhFudgeMyBatteryChat) (MIT).
 - Built with [Electron](https://www.electronjs.org) and [ws](https://github.com/websockets/ws).
 
-VR Macro Pad is an independent project. It is **not affiliated with** [Macro Deck](https://macro-deck.app) (a different app by SuchByte), Valve, Meta, Twitch, Spotify, OBS, VRChat or VB-Audio. Those names belong to their owners.
+VR Macro Pad is an independent project. It is **not affiliated with** [Macro Deck](https://macro-deck.app) (a different app by SuchByte), Valve, Meta, Twitch, Kick, Google / YouTube, Discord, Streamer.bot, Spotify, OBS, VRChat or VB-Audio. Those names belong to their owners.
 
 ## 💬 Contact
 
 Made by **Jayconius** · [jayconius.com](https://jayconius.com)
 Found a bug or want a feature? [Open an issue](https://github.com/Jayconius/VRMacroPad/issues).
+[Privacy policy](https://vrmacropad.jayconius.com/privacy.html) · [Terms](https://vrmacropad.jayconius.com/terms.html)
 
 ## 📄 License
 

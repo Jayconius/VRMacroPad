@@ -15,16 +15,17 @@ function fakeSteam(values = {}) {
     calls: [],
     toasts: [],
   };
+  const control = async (op, args = {}) => {
+    st.calls.push({ op, ...args });
+    if (op === 'settings.state') return { connected: st.connected, error: st.connected ? '' : 'SteamVR is not running', values: st.values, boundsForced: st.boundsForced };
+    if (!st.connected) throw new Error('SteamVR is not running');
+    if (op === 'settings.set') { st.values[`${args.section}.${args.key}`] = args.value; return args.value; }
+    if (op === 'bounds.force') { st.boundsForced = args.on; return args.on; }
+    return true;
+  };
   st.ctx = {
     toast: (text) => st.toasts.push(text),
-    vrControl: async (op, args = {}) => {
-      st.calls.push({ op, ...args });
-      if (op === 'settings.state') return { connected: st.connected, error: st.connected ? '' : 'SteamVR is not running', values: st.values, boundsForced: st.boundsForced };
-      if (!st.connected) throw new Error('SteamVR is not running');
-      if (op === 'settings.set') { st.values[`${args.section}.${args.key}`] = args.value; return args.value; }
-      if (op === 'bounds.force') { st.boundsForced = args.on; return args.on; }
-      return true;
-    },
+    plugin: (id) => (id === 'steamvr' ? { control } : null),
   };
   st.sets = () => st.calls.filter((c) => c.op === 'settings.set').map((c) => [`${c.section}.${c.key}`, c.value]);
   return st;

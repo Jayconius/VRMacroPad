@@ -1,0 +1,52 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 520" width="900" height="520" role="img" aria-labelledby="t d">
+  <title id="t">Where the plugin folder goes</title>
+  <desc id="d">A File Explorer window at %APPDATA%\VR Macro Pad\plugins\mydiscord showing plugin.js, runtime.js and actions.js, next to two common mistakes: a folder nested one level too deep, and plugin.js loose in the plugins folder.</desc>
+  <style>
+    text { font-family: -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; }
+    .mono { font-family: ui-monospace, SFMono-Regular, Consolas, Menlo, monospace; }
+    .h { font-size: 22px; font-weight: 700; fill: #f2f5fa; }
+    .sub { font-size: 14px; fill: #9fb0c8; }
+    .t { font-size: 15px; fill: #c9d4e5; }
+    .m { font-size: 15px; fill: #f2f5fa; }
+  </style>
+  <rect width="900" height="520" rx="18" fill="#101826"/>
+  <text x="36" y="52" class="h">Where the plugin folder goes</text>
+  <text x="36" y="76" class="sub">Paste the path into File Explorer's address bar. Each plugin gets its own folder.</text>
+
+  <!-- correct: explorer window -->
+  <rect x="36" y="100" width="470" height="380" rx="12" fill="#182236" stroke="#3fb88a" stroke-width="2.5"/>
+  <rect x="36" y="100" width="470" height="34" rx="12" fill="#22335a"/>
+  <rect x="36" y="122" width="470" height="12" fill="#22335a"/>
+  <circle cx="56" cy="117" r="5" fill="#e87c9f"/><circle cx="74" cy="117" r="5" fill="#e8c46a"/><circle cx="92" cy="117" r="5" fill="#3fb88a"/>
+  <text x="112" y="122" class="t" style="font-size:13px">File Explorer</text>
+  <rect x="52" y="146" width="438" height="32" rx="6" fill="#0b111c" stroke="#2b3b58"/>
+  <text x="64" y="167" class="mono m" style="font-size:14.5px">%APPDATA%\VR Macro Pad\plugins\mydiscord</text>
+
+  <path d="M70 200 h14 l5 6 h18 a3 3 0 0 1 3 3 v16 a3 3 0 0 1 -3 3 h-37 a3 3 0 0 1 -3 -3 v-22 a3 3 0 0 1 3 -3z" fill="#e8c46a" opacity="0.55"/>
+  <text x="122" y="224" class="mono t">plugins</text>
+  <path d="M100 254 h14 l5 6 h18 a3 3 0 0 1 3 3 v16 a3 3 0 0 1 -3 3 h-37 a3 3 0 0 1 -3 -3 v-22 a3 3 0 0 1 3 -3z" fill="#e8c46a"/>
+  <text x="152" y="278" class="mono m" style="font-weight:700">mydiscord</text>
+
+  <rect x="130" y="304" width="300" height="34" rx="8" fill="#22335a" stroke="#4c8dff"/><text x="146" y="327" class="mono" style="font-size:16px;font-weight:700;fill:#8fbcff">plugin.js</text>
+  <rect x="130" y="346" width="300" height="34" rx="8" fill="#1f3d34" stroke="#3fb88a"/><text x="146" y="369" class="mono" style="font-size:16px;font-weight:700;fill:#7fe0b8">runtime.js</text>
+  <rect x="130" y="388" width="300" height="34" rx="8" fill="#45301f" stroke="#e8a45c"/><text x="146" y="411" class="mono" style="font-size:16px;font-weight:700;fill:#f2c48a">actions.js</text>
+  <text x="60" y="456" class="t" style="fill:#7fe0b8;font-weight:700">Correct: plugin.js sits directly inside the plugin's folder.</text>
+
+  <!-- mistakes -->
+  <rect x="540" y="100" width="324" height="176" rx="12" fill="#182236" stroke="#e87c9f" stroke-width="2"/>
+  <circle cx="566" cy="128" r="12" fill="#e87c9f"/><path d="M561 123 l10 10 M571 123 l-10 10" stroke="#101826" stroke-width="2.6"/>
+  <text x="588" y="134" class="m" style="font-weight:700">Too deep</text>
+  <text x="560" y="164" class="mono t" style="font-size:14px">plugins\</text>
+  <text x="576" y="188" class="mono t" style="font-size:14px">mydiscord\</text>
+  <text x="592" y="212" class="mono t" style="font-size:14px">mydiscord\</text>
+  <text x="608" y="236" class="mono" style="font-size:14px;fill:#f0a0bd">plugin.js  (not found)</text>
+  <text x="560" y="262" class="sub" style="font-size:13px">Happens when you unzip into a new folder.</text>
+
+  <rect x="540" y="296" width="324" height="184" rx="12" fill="#182236" stroke="#e87c9f" stroke-width="2"/>
+  <circle cx="566" cy="324" r="12" fill="#e87c9f"/><path d="M561 319 l10 10 M571 319 l-10 10" stroke="#101826" stroke-width="2.6"/>
+  <text x="588" y="330" class="m" style="font-weight:700">Loose in plugins</text>
+  <text x="560" y="360" class="mono t" style="font-size:14px">plugins\</text>
+  <text x="576" y="384" class="mono" style="font-size:14px;fill:#f0a0bd">plugin.js  (not in a folder)</text>
+  <text x="576" y="408" class="mono" style="font-size:14px;fill:#f0a0bd">runtime.js</text>
+  <text x="560" y="452" class="sub" style="font-size:13px">Every plugin needs a folder of its own.</text>
+</svg>

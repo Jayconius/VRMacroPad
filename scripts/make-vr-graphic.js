@@ -103,7 +103,7 @@ app.whenReady().then(async () => {
     .chips span { padding: 8px 16px; border-radius: 999px; background: rgba(12, 14, 30, 0.72); border: 1px solid rgba(255, 255, 255, 0.22); font-size: 19px; }
   </style></head><body>
     <div class="stars"></div><div class="mount"></div><div class="haze"></div><div class="floor"></div><div class="grid"></div>
-    <div class="title"><h1>VR Macro Pad 2.0</h1><p>A real SteamVR overlay: your deck, in the headset</p></div>
+    <div class="title"><h1>VR Macro Pad 3.0</h1><p>A real SteamVR overlay: your deck, in the headset</p></div>
     <div class="stage">
       <div class="deck"><img src="${deck}"></div>
       <div class="dash"><img src="${dash}"></div>

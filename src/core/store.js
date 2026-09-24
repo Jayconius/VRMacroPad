@@ -7,11 +7,14 @@ const BACKUP_KEEP = 20;
 const BACKUP_MIN_INTERVAL_MS = 5 * 60 * 1000;
 
 class Store {
-  constructor(dir) {
+  // registry: the plugin registry to normalize settings against (built-ins plus any user plugins); defaults
+  // to the built-ins, which is what every caller that never mentions plugins wants.
+  constructor(dir, registry) {
     this.dir = dir;
     this.file = path.join(dir, 'config.json');
     this.backupDir = path.join(dir, 'backups');
     this.lastBackup = 0;
+    this.registry = registry;
     fs.mkdirSync(this.backupDir, { recursive: true });
   }
 
@@ -20,7 +23,7 @@ class Store {
     if (fs.existsSync(this.file)) {
       try {
         const raw = JSON.parse(fs.readFileSync(this.file, 'utf8'));
-        const res = normalizeConfig(raw);
+        const res = normalizeConfig(raw, this.registry);
         return { config: res.config, warnings: res.warnings, fresh: false };
       } catch (err) {
         // Keep the unreadable file around instead of overwriting it with defaults.
@@ -29,7 +32,7 @@ class Store {
         warnings = [`config.json could not be read (${err.message}); it was moved to ${path.basename(bad)} and defaults were loaded.`];
       }
     }
-    return { config: defaultConfig(), warnings, fresh: true };
+    return { config: defaultConfig(this.registry), warnings, fresh: true };
   }
 
   save(config) {
@@ -78,14 +81,20 @@ class Store {
   readBackup(name) {
     if (!/^config-[\w.-]+\.json$/.test(name)) throw new Error('Invalid backup name');
     const raw = JSON.parse(fs.readFileSync(path.join(this.backupDir, name), 'utf8'));
-    return normalizeConfig(raw);
+    return normalizeConfig(raw, this.registry);
   }
 }
 
-// Copy of the config safe to share: passwords and any param flagged secret are blanked.
-function stripSecrets(config, actionDefs) {
+// Copy of the config safe to share: passwords and any param (or plugin settings field) flagged secret are
+// blanked. `registry` is the app's plugin registry (so a third-party plugin's own secret fields are covered
+// too); it defaults to the plugins bundled with the app.
+function stripSecrets(config, actionDefs, registry = require('./plugin-loader').builtinRegistry()) {
   const copy = JSON.parse(JSON.stringify(config));
-  copy.settings.obs.password = '';
+  for (const manifest of registry.list()) {
+    const slice = copy.settings.plugins && copy.settings.plugins[manifest.id];
+    if (!slice) continue;
+    for (const f of manifest.settingsFields || []) if (f.secret || f.type === 'password') slice[f.key] = '';
+  }
   for (const page of copy.pages) {
     for (const b of page.buttons) {
       for (const step of b.steps) {

@@ -1,72 +1,79 @@
-// The action catalog. Each entry is self-describing (params drive the UI form),
-// so adding a new action means adding one object to one of these files.
-const groups = [require('./audio'), require('./system'), require('./media'), require('./obs'), require('./vrchat'), require('./steamvr'), require('./voicemeeter'), require('./twitch'), require('./pear'), require('./spotify')];
-const { widgetCatalog } = require('../widgets');
+// The action catalog. Built from every loaded plugin's own action list (see src/core/plugin-loader.js and
+// docs/PLUGIN-GUIDE.md) plus the state keys the UI offers for "follow a state" and "when a state changes".
+// This module itself only carries the plugins bundled with the app (plugins/*), loaded once, exactly like
+// the old static per-file action groups; a running app additionally merges in the user's own plugins via
+// loadUserPlugins() (called once from src/core/index.js).
+const { PluginRegistry, builtinRegistry, BUILTIN_DIR } = require('../plugin-loader');
+const { registerWidgets, widgetCatalog } = require('../widgets');
 
-const defs = new Map();
-for (const group of groups) {
-  for (const def of group) {
-    if (defs.has(def.id)) throw new Error(`Duplicate action id ${def.id}`);
-    defs.set(def.id, def);
-  }
+// One shared registry for the whole process (see the loader for why this is safe to share across tests).
+const registry = new PluginRegistry();
+for (const manifest of builtinRegistry().list()) registry.add(manifest);
+
+const defs = registry.actionDefs; // id -> action def, same Map shape callers have always used
+const STATE_KEYS = registry.stateKeys;
+registerWidgets(registry.widgetDefs);
+
+// Adds a plugin folder's actions/widgets/state keys into the running catalog. Safe to call more than once
+// with the same folder (a no-op the second time); a genuine id clash throws, same as a duplicate built-in.
+function loadUserPlugins(dir) {
+  if (!dir) return [];
+  const before = new Set(registry.plugins.keys());
+  registry.addDir(dir);
+  registerWidgets(registry.widgetDefs);
+  return [...registry.plugins.keys()].filter((id) => !before.has(id));
 }
 
-// State keys the UI can offer for "state source" and "state changes" triggers.
-const STATE_KEYS = [
-  { key: 'audio.in.muted', label: 'Default microphone is muted', group: 'Audio' },
-  { key: 'audio.out.muted', label: 'Default output is muted', group: 'Audio' },
-  { key: 'audio.out.default', label: 'Default output device is…', group: 'Audio', arg: 'audio.render' },
-  { key: 'audio.in.default', label: 'Default microphone is…', group: 'Audio', arg: 'audio.capture' },
-  { key: 'obs.recording', label: 'OBS is recording', group: 'OBS' },
-  { key: 'obs.streaming', label: 'OBS is streaming', group: 'OBS' },
-  { key: 'obs.replay', label: 'OBS replay buffer is on', group: 'OBS' },
-  { key: 'obs.scene', label: 'OBS scene is…', group: 'OBS', arg: 'obs.scenes' },
-  { key: 'obs.inputMuted', label: 'OBS source is muted…', group: 'OBS', arg: 'obs.inputs' },
-  { key: 'vrc.MuteSelf', label: 'VRChat mic is muted', group: 'VRChat' },
-  { key: 'vrc.param', label: 'VRChat avatar parameter is on…', group: 'VRChat', arg: 'text' },
-  { key: 'vrc.VRMode', label: 'You are playing VRChat in VR', group: 'VRChat' },
-  { key: 'vrc.AFK', label: 'You are AFK in VRChat', group: 'VRChat' },
-  { key: 'vrc.Seated', label: 'You are seated in VRChat', group: 'VRChat' },
-  { key: 'vrc.Earmuffs', label: 'VRChat earmuffs are on', group: 'VRChat' },
-  { key: 'vrc.InStation', label: 'You are in a VRChat station (chair)', group: 'VRChat' },
-  { key: 'proc', label: 'App is running…', group: 'System', arg: 'processes' },
-  { key: 'media.playing', label: 'Music / video is playing', group: 'Media' },
-  { key: 'vr.connected', label: 'SteamVR is running', group: 'SteamVR' },
-  { key: 'vr.dimmed', label: 'The view is dimmed', group: 'SteamVR' },
-  { key: 'vr.motionSmoothing', label: 'SteamVR motion smoothing is on', group: 'SteamVR' },
-  { key: 'vr.perfGraph', label: 'SteamVR performance graph is showing', group: 'SteamVR' },
-  { key: 'vr.boundsForced', label: 'Play-area bounds are kept visible', group: 'SteamVR' },
-  { key: 'vr.lowBattery', label: 'A headset / controller / tracker battery is low', group: 'SteamVR' },
-  { key: 'vr.charging', label: 'A headset / controller / tracker is charging', group: 'SteamVR' },
-  { key: 'vr.hmdWorn', label: 'The headset is on your head', group: 'SteamVR' },
-  { key: 'vr.trackingLost', label: 'A device lost tracking', group: 'SteamVR' },
-  { key: 'vr.dropped', label: 'A device you used before is off or dropped out', group: 'SteamVR' },
-  { key: 'vr.device', label: 'This device is connected…', group: 'SteamVR', arg: 'vr.devices' },
-  { key: 'vm.connected', label: 'Voicemeeter is running', group: 'Voicemeeter' },
-  { key: 'vm.param', label: 'Voicemeeter switch is on… (like Strip[0].Mute)', group: 'Voicemeeter', arg: 'text' },
-  { key: 'vm.macro', label: 'Voicemeeter macro button is on… (number)', group: 'Voicemeeter', arg: 'text' },
-  { key: 'spotify.playing', label: 'Spotify is playing', group: 'Spotify' },
-  { key: 'spotify.liked', label: 'The Spotify song playing is liked', group: 'Spotify' },
-  { key: 'spotify.shuffle', label: 'Spotify shuffle is on', group: 'Spotify' },
-  { key: 'spotify.repeat', label: 'Spotify repeat is on', group: 'Spotify' },
-  { key: 'pear.connected', label: 'Pear (YouTube Music) is connected', group: 'YouTube Music' },
-  { key: 'pear.playing', label: 'YouTube Music is playing', group: 'YouTube Music' },
-  { key: 'pear.liked', label: 'Current YouTube Music song is liked', group: 'YouTube Music' },
-  { key: 'pear.shuffle', label: 'YouTube Music shuffle is on', group: 'YouTube Music' },
-  { key: 'pear.repeat', label: 'YouTube Music repeat is on', group: 'YouTube Music' },
-  { key: 'twitch.connected', label: 'Twitch is connected', group: 'Twitch' },
-  { key: 'twitch.live', label: 'You are live on Twitch', group: 'Twitch' },
-  { key: 'twitch.adSoon', label: 'An ad break is coming up soon', group: 'Twitch' },
-  { key: 'twitch.emoteOnly', label: 'Emote-only mode is on', group: 'Twitch' },
-  { key: 'twitch.followersOnly', label: 'Followers-only mode is on', group: 'Twitch' },
-  { key: 'twitch.subsOnly', label: 'Subscribers-only mode is on', group: 'Twitch' },
-  { key: 'twitch.slowMode', label: 'Slow mode is on', group: 'Twitch' },
-  { key: 'twitch.uniqueChat', label: 'Unique chat is on', group: 'Twitch' },
-  { key: 'twitch.shield', label: 'Shield mode is on', group: 'Twitch' },
-];
+// statusFor(id): the live status() a running app has for that plugin (server.js passes providers.status()
+// through); pluginList() calls manifest.instructions(status) here, server-side, because a manifest function
+// can never survive the trip to the browser as JSON — everything else it needs is plain data and is sent
+// through as-is (statusHints, testOptionKind, coreFields), so the Plugins tab reads it with no plugin id
+// ever hardcoded in the UI.
+function safeText(fn, arg) {
+  if (!fn) return '';
+  try { return String(fn(arg) || ''); } catch { return ''; }
+}
+
+// A plugin's optional set-up guide (an "Instructions" button in its Settings card): { title, intro, steps: [{ title, text,
+// links: [{ label, url }], copy: { label, text } }], outro }. Resolved here, server-side, and cleaned down to plain text and
+// https links, so nothing a plugin declares can put markup or a non-web link in front of the user.
+function cleanGuide(g) {
+  if (!g || typeof g !== 'object') return null;
+  const s = (v, n) => String(v == null ? '' : v).slice(0, n);
+  const steps = (Array.isArray(g.steps) ? g.steps : []).slice(0, 30).map((st) => ({
+    title: s(st && st.title, 120),
+    text: s(st && st.text, 1200),
+    links: (Array.isArray(st && st.links) ? st.links : []).slice(0, 6)
+      .filter((l) => l && /^https:\/\/[^\s]+$/.test(String(l.url)))
+      .map((l) => ({ label: s(l.label || l.url, 80), url: s(l.url, 300) })),
+    copy: st && st.copy && st.copy.text ? { label: s(st.copy.label || 'Copy', 40), text: s(st.copy.text, 400) } : null,
+  })).filter((st) => st.title || st.text);
+  if (!steps.length) return null;
+  return { button: s(g.button || 'Instructions', 40), title: s(g.title, 120), intro: s(g.intro, 800), steps, outro: s(g.outro, 800) };
+}
+function safeGuide(guide, arg) {
+  if (!guide) return null;
+  try { return cleanGuide(typeof guide === 'function' ? guide(arg) : guide); } catch { return null; }
+}
+
+function pluginList(statusFor = () => ({})) {
+  return registry.list().map((m) => ({
+    id: m.id, name: m.name, version: m.version || '', description: m.description || '', icon: m.icon || '🔌',
+    builtin: m.dir.startsWith(BUILTIN_DIR),
+    settingsFields: m.settingsFields || [],
+    connections: m.connections || [],
+    clientMethods: m.clientMethods || [],
+    instructions: safeText(m.instructions, statusFor(m.id) || {}),
+    guide: safeGuide(m.guide, statusFor(m.id) || {}),
+    advancedLabel: m.advancedLabel || '',
+    statusHints: m.statusHints || {},
+    testOptionKind: m.testOptionKind || '',
+    coreFields: m.coreFields || [],
+  }));
+}
 
 // What the browser needs to build forms (functions and run() stay on the server).
-function catalogForUi() {
+function catalogForUi(statusFor) {
   return {
     actions: [...defs.values()].map((d) => ({
       id: d.id,
@@ -80,6 +87,9 @@ function catalogForUi() {
     })),
     widgets: widgetCatalog(),
     stateKeys: STATE_KEYS,
+    plugins: pluginList(statusFor),
+    // Plugins that could not be loaded, with the reason, so Settings can say so instead of them silently missing.
+    pluginErrors: registry.errors.map((e) => ({ name: e.name, dir: e.dir, error: e.error })),
   };
 }
 
@@ -88,11 +98,12 @@ function autoStateKey(button) {
   for (const step of button.steps) {
     const def = defs.get(step.action);
     if (def && def.state) {
-      const key = def.state(step.params || {});
+      let key = null;
+      try { key = def.state(step.params || {}); } catch { /* a buggy state() just means "no automatic state" */ }
       if (key) return key;
     }
   }
   return null;
 }
 
-module.exports = { defs, STATE_KEYS, catalogForUi, autoStateKey };
+module.exports = { defs, STATE_KEYS, catalogForUi, autoStateKey, registry, loadUserPlugins, pluginList, cleanGuide };

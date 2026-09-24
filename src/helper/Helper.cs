@@ -327,6 +327,8 @@ namespace VrmdHelper
                 item["id"] = id;
                 item["name"] = FriendlyName(d);
                 item["isDefault"] = id == defId;
+                // The real mute state of every device, so a button tied to one microphone can show the truth.
+                try { bool m; Endpoint(d).GetMute(out m); item["muted"] = m; } catch (Exception) { }
                 list.Add(item);
             }
             return list;

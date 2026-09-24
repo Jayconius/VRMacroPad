@@ -31,7 +31,7 @@ function safeEqual(a, b) {
   return x.length === y.length && crypto.timingSafeEqual(x, y);
 }
 
-function createServer({ engine, providers, helper, store, images, hooks, token, uiDir, sharedDir, version, devMode }) {
+function createServer({ engine, providers, helper, store, images, hooks, token, uiDir, sharedDir, version, devMode, registry, updater }) {
   let port = 0;
   const clients = new Set();
 
@@ -117,15 +117,18 @@ function createServer({ engine, providers, helper, store, images, hooks, token, 
     return {
       t: 'init',
       config: engine.config,
-      catalog: catalogForUi(),
+      catalog: catalogForUi((id) => providers.status().plugins[id]),
       buttonStates: engine.computeButtonStates(),
       widgetData: engine.computeWidgetData(),
       activePage: engine.activePageId,
       edit: engine.editState(),
       status: status(),
+      update: updater ? updater.info : null,
       log: engine.log,
       overlay: overlayLogic.pictureSize(engine.config.settings.overlay.resolution),
-      app: { version, overlayDefaults: overlayLogic.DEFAULT_OFFSETS, about: { author: appConfig.author, website: appConfig.website, github: appConfig.githubUrl }, devMode: Boolean(devMode), platform: process.platform, hasHost: Boolean(hooks.isDesktop), twitchBuiltIn: Boolean(providers.twitch && providers.twitch.defaultClientId) },
+      // Whether a plugin ships with a bundled key/app-id (Twitch does) is generic: any plugin's own
+      // status().hasBuiltIn says so — nothing here needs to know which plugin that happens to be.
+      app: { version, overlayDefaults: overlayLogic.DEFAULT_OFFSETS, about: { author: appConfig.author, website: appConfig.website, github: appConfig.githubUrl }, devMode: Boolean(devMode), platform: process.platform, hasHost: Boolean(hooks.isDesktop) },
     };
   }
 
@@ -269,52 +272,34 @@ function createServer({ engine, providers, helper, store, images, hooks, token, 
     async 'media.thumb'(msg) {
       return providers.thumb(String(msg.key));
     },
-    // ---- Pear Desktop / YouTube Music: approve this app once inside Pear ----
-    async 'pear.connect'() {
+    // A plugin's own "Connect", "Disconnect", "Check permissions" and the like. Only method names the
+    // plugin itself lists in clientMethods can be called this way (see plugin.js / docs/PLUGIN-GUIDE.md),
+    // so a plugin controls exactly what the browser may trigger, nothing more.
+    async 'plugin.call'(msg) {
       requireEditing();
-      providers.pear.authorize(); // waits for you to click Allow in Pear; progress arrives as status updates
-      return true;
+      const manifest = registry.get(String(msg.plugin || ''));
+      if (!manifest) throw new Error('Unknown plugin');
+      const method = String(msg.method || '');
+      if (!(manifest.clientMethods || []).includes(method)) throw new Error(`"${method}" cannot be called from the browser`);
+      const rt = providers.get(manifest.id);
+      if (!rt || typeof rt[method] !== 'function') throw new Error('That plugin is not available right now');
+      const args = Array.isArray(msg.args) ? msg.args.slice(0, 4) : [];
+      return rt[method](...args);
     },
-    async 'pear.disconnect'() {
-      requireEditing();
-      providers.pear.disconnect();
-      return true;
-    },
-    // ---- Twitch account link (changes what the app can do, so it needs the edit lock open) ----
-    async 'twitch.connect'() {
-      requireEditing();
-      return providers.twitch.startDeviceFlow();
-    },
-    async 'twitch.disconnect'() {
-      requireEditing();
-      await providers.twitch.disconnect();
-      return true;
-    },
-    async 'twitch.check'() {
-      requireEditing();
-      return providers.twitch.validate();
-    },
-    // ---- Spotify account link (only used for "Like") ----
-    async 'spotify.connect'() {
-      requireEditing();
-      return providers.spotify.startAuth();
-    },
-    async 'spotify.disconnect'() {
-      requireEditing();
-      await providers.spotify.disconnect();
-      return true;
-    },
-    // Only ever opens Twitch's or Spotify's own sign-in page, or the author's own links from the About tab.
+    // Only ever opens a plugin's own sign-in page (each plugin lists the domains it needs), or the author's
+    // own links from the About tab.
     async 'open.external'(msg) {
       let u;
       try { u = new URL(String(msg.url)); } catch { throw new Error('That is not a link'); }
       const own = [appConfig.website, appConfig.githubUrl].filter(Boolean).map((l) => new URL(l));
       const ownLink = own.some((o) => o.hostname === u.hostname && u.pathname.startsWith(o.pathname === '/' ? '/' : o.pathname));
-      if (u.protocol !== 'https:' || !(['www.twitch.tv', 'twitch.tv', 'accounts.spotify.com'].includes(u.hostname) || ownLink)) throw new Error('Only twitch.tv, Spotify sign-in and the app\'s own links can be opened from here');
+      const pluginHosts = new Set();
+      for (const m of registry.list()) for (const h of m.externalDomains || []) pluginHosts.add(h);
+      if (u.protocol !== 'https:' || !(pluginHosts.has(u.hostname) || ownLink)) throw new Error('Only a plugin\'s sign-in page and the app\'s own links can be opened from here');
       return hooks.openExternal(u.toString());
     },
     async 'config.export'() {
-      return stripSecrets(engine.config, defs);
+      return stripSecrets(engine.config, defs, registry);
     },
     async 'config.import'(msg) {
       requireEditing();
@@ -330,6 +315,25 @@ function createServer({ engine, providers, helper, store, images, hooks, token, 
     },
     async 'status.get'() {
       return status();
+    },
+    // ---- updates (Settings → General turns the automatic check on; "Check now" always works) ----
+    async 'update.check'() {
+      return updater.check({ manual: true });
+    },
+    async 'update.download'() {
+      updater.download().catch(() => {}); // progress arrives as 'update' messages
+      return updater.info;
+    },
+    async 'update.skip'() {
+      return updater.skip();
+    },
+    async 'update.install'() {
+      if (!hooks.isDesktop) throw new Error('Only the desktop app can install an update');
+      return updater.install();
+    },
+    async 'update.reveal'() {
+      if (!hooks.isDesktop) throw new Error('Only the desktop app can show files');
+      return updater.reveal();
     },
   };
 
@@ -363,6 +367,7 @@ function createServer({ engine, providers, helper, store, images, hooks, token, 
   engine.on('toast', (entry) => broadcast({ t: 'toast', entry }));
   engine.on('running', (r) => broadcast({ t: 'running', ...r }));
   engine.on('pressResult', (r) => broadcast({ t: 'pressResult', ...r }));
+  if (updater) updater.on('update', (info) => broadcast({ t: 'update', update: info }));
   providers.on('status', () => broadcast({ t: 'status', status: status() }));
   helper.on('status', () => broadcast({ t: 'status', status: status() }));
   const statusTimer = setInterval(() => { if (clients.size) broadcast({ t: 'status', status: status() }); }, 5000);

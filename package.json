@@ -1,7 +1,7 @@
 {
   "name": "vr-macro-pad",
   "productName": "VR Macro Pad",
-  "version": "2.0.0",
+  "version": "3.0.0",
   "description": "Colored push-button macros and live mini screens, as a native SteamVR overlay or a desktop window. Voicemeeter, OBS, VRChat, Twitch, Spotify and more.",
   "main": "src/main/main.js",
   "scripts": {
@@ -35,10 +35,12 @@
     },
     "files": [
       "src/**/*",
+      "plugins/**/*",
       "vendor/**/*",
       "scripts/build-helper.js",
       "package.json",
       "!**/*.md",
+      "!plugins/*/broker/**",
       "!src/core/dev.js"
     ],
     "asar": true,

@@ -8,6 +8,8 @@ build/
 
 # local-only: test tools, dev data, editor / tool folders
 dev-tools/
+tools/
+.art-tmp/
 .devdata/
 .claude/
 .vscode/
@@ -15,6 +17,10 @@ dev-tools/
 
 # your own data, in case a data folder ever ends up next to the code
 secrets.json
+plugins/kick/kick-app.json
+plugins/youtube/youtube-app.json
+# the private sign-in helpers (Cloudflare Workers) and their set-up guides: they stay on the developer PC
+plugins/*/broker/
 auth.json
 runtime.json
 .env
@@ -32,3 +38,16 @@ Thumbs.db
 docs/dev/
 Start Overlay Dev.bat
 scripts/overlay-flicker-probe.js
+
+# keys, certificates and deployment files must never be committed, wherever they end up
+*.pem
+*.key
+*.pfx
+*.p12
+.key-secret
+issued-keys.txt
+revoked-keys.txt
+client_secret*.json
+.dev.vars
+.wrangler/
+wrangler.toml
