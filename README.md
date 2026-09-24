@@ -203,8 +203,10 @@ VR Macro Pad is an independent project. It is **not affiliated with** [Macro Dec
 
 ## 💬 Contact
 
-Made by **Jayconius** · [jayconius.com](https://jayconius.com)
+Made by **Jayconius** ([jayconius.com](https://jayconius.com)) and **Claude**, an AI assistant from [Anthropic](https://www.anthropic.com). Jayconius came up with it and tested it in VR; Claude wrote the code, tests and docs.
+
 Found a bug or want a feature? [Open an issue](https://github.com/Jayconius/VRMacroPad/issues).
+
 [Privacy policy](https://vrmacropad.jayconius.com/privacy.html) · [Terms](https://vrmacropad.jayconius.com/terms.html)
 
 ## 📄 License
