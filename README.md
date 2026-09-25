@@ -225,10 +225,12 @@ Two files are deliberately **not** in the repository: the address of the private
 
 - [OpenVR SDK](https://github.com/ValveSoftware/openvr) by Valve (BSD-3), used for the overlay and to read SteamVR batteries and settings.
 - [Voicemeeter](https://voicemeeter.com) and its Remote API by VB-Audio (the API is used through the DLL that comes with Voicemeeter; nothing of theirs is bundled).
+- [Libre Hardware Monitor](https://github.com/LibreHardwareMonitor/LibreHardwareMonitor) (MPL-2.0) and [HWiNFO](https://www.hwinfo.com) by Martin Malik (REALiX): the Hardware plugins only read the numbers these free programs show, through Libre Hardware Monitor's web server and HWiNFO's Shared Memory Support. Nothing of theirs is bundled.
+- [Voicemod](https://www.voicemod.net) (Control API), [Mix It Up](https://mixitup.bot) (Developer API) and [TeamSpeak](https://www.teamspeak.com) (ClientQuery): controlled through their own official interfaces on your PC; nothing of theirs is bundled.
 - The device pictures come from the author's other app, [OhFudgeMyBatteryChat](https://github.com/Jayconius/OhFudgeMyBatteryChat) (MIT).
 - Built with [Electron](https://www.electronjs.org) and [ws](https://github.com/websockets/ws).
 
-VR Macro Pad is an independent project. It is **not affiliated with** [Macro Deck](https://macro-deck.app) (a different app by SuchByte), Valve, Meta, Twitch, Kick, Google / YouTube, Discord, Streamer.bot, Spotify, OBS, VRChat or VB-Audio. Those names belong to their owners.
+VR Macro Pad is an independent project. It is **not affiliated with** [Macro Deck](https://macro-deck.app) (a different app by SuchByte), Valve, Meta, Twitch, Kick, Google / YouTube, Discord, Streamer.bot, Spotify, OBS, VRChat, VB-Audio, Voicemod, Mix It Up, TeamSpeak, Libre Hardware Monitor or HWiNFO. Those names belong to their owners.
 
 ## 💬 Contact
 
