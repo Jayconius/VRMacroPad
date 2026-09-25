@@ -82,6 +82,8 @@ items and the two Twitch ones with the other Twitch items. They are buttons that
 | Dice roller | d4-d100 or custom, several dice, a modifier, advantage / disadvantage on a d20; optionally posts to chat |
 | SteamVR battery | Headset, controllers, trackers (and base stations) as a list with bars, or as illustrated pictures that switch to a red low-battery version. Shows charging, "tracking lost", and devices that are off or dropped out (with their last level). Nicknames and pictures per serial |
 | Now playing | Album cover, title, artist, progress bar, play / pause / skip / click-to-seek. Spotify and most players |
+| Hardware stat with graph | One live number with a small graph (CPU / GPU temperature or usage, GPU memory, memory used, drive temperature, network speed, or any sensor), amber and red when high. From the Libre Hardware Monitor or HWiNFO plugin |
+| Hardware overview, Hottest parts, Network speed, Drives | A live list of the readings you pick, the hottest temperatures on your PC, your network speed with a graph, and each drive's temperature and fullness |
 | Twitch ad timer | Countdown to your next ad break, snooze counter, tap to snooze |
 | Twitch stream status | Live badge, viewer count, uptime |
 
@@ -155,6 +157,8 @@ Every integration is a plugin: open **Settings → Plugins** and expand its card
   background) and Play a sound. Each voice or sound button has one **List** dropdown that starts on the complete list (voices: all /
   Voicemod's / Community; sounds: all, then your soundboards, then Voicemod's), and a picker you can scroll or type in. Voicemod only reports
   a new sound (or soundboard) after it has been played once in Voicemod; press ⟳ afterwards.
+* **Libre Hardware Monitor**: run it (as administrator, so it can read every sensor), open Options → Remote Web Server → Run, then press **Save and test connection** on its card. Add a *Hardware stat with graph* (or Overview, Hottest parts, Network speed, Drives) widget to a button. Buttons can also follow "the CPU is hot", "the GPU is hot", "a drive is hot", "the CPU / GPU is nearly maxed out" and "memory is nearly full"; the levels are in the card's Advanced section, and the card also has °C / °F.
+* **HWiNFO**: the same widgets from HWiNFO. In HWiNFO's Settings (General / User Interface tab) tick **Shared Memory Support**, press OK and **restart HWiNFO** (close it completely, also from the tray icon, and start it again) with its Sensors window running. The free version switches Shared Memory Support off after 12 hours (tick it again and restart); HWiNFO Pro does not. Then press **Save and test connection** on the card.
 * **TeamSpeak 3**: Tools → Options → Addons → ClientQuery → Settings, copy the API key into the TeamSpeak 3 card, connect to a server, and
   press **Save and test connection**. Buttons mute your microphone or speakers or set you away, and light up to follow TeamSpeak.
   TeamSpeak 5 / 6 cannot be controlled by other apps.

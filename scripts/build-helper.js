@@ -35,6 +35,14 @@ const TARGETS = {
     flags: ['/platform:x64'],
     copy: [],
   },
+  // hwinfo: reads HWiNFO's read-only Shared Memory Support block (the HWiNFO hardware plugin).
+  hwinfo: {
+    exe: 'vrmd-hwinfo.exe',
+    sources: ['src/helper/HwinfoHelper.cs'],
+    refs: ['System.Web.Extensions.dll', 'System.Core.dll'],
+    flags: [],
+    copy: [],
+  },
   // overlay: puts the app's picture into SteamVR and reports laser clicks back.
   overlay: {
     exe: 'vrmd-overlay.exe',

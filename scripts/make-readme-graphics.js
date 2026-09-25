@@ -45,7 +45,7 @@ const banner = (deckB64) => `<!doctype html><html><head><meta charset="utf-8"><s
   <div class="logo"><i style="background:#2f855a"></i><i style="background:#4c8dff"></i><i style="background:#b7791f"></i><i style="background:#6b46c1"></i></div>
   <h1>VR Macro Pad</h1>
   <div class="sub">Push-button macros and live mini screens, for the desktop and for pinning in VR.</div>
-  <div class="pills"><span>SteamVR</span><span>Twitch</span><span class="new">YouTube</span><span class="new">Kick</span><span>OBS</span><span>VRChat</span><span class="new">Discord</span><span class="new">Streamer.bot</span><span>Spotify</span><span class="new">+ your own plugins</span></div>
+  <div class="pills"><span>SteamVR</span><span>Twitch</span><span class="new">YouTube</span><span class="new">Kick</span><span>OBS</span><span>VRChat</span><span class="new">Discord</span><span class="new">Streamer.bot</span><span>Spotify</span><span class="new">Hardware stats</span><span class="new">+ your own plugins</span></div>
   <img class="shot" src="${deckB64}">
 </body></html>`;
 

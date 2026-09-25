@@ -26,13 +26,21 @@ Use it on your desktop, or float it in VR as a real **SteamVR overlay**.
 
 ## ✨ What is it?
 
-A grid of big, colored buttons that run macros, plus **mini screens** that show live information (SteamVR battery, the song playing, your stream's ad timer and viewers, a clock, dice...). Press a button and it mutes your mic, switches your OBS scene, sends a chat message on Twitch, Kick or YouTube, changes your Voicemod voice, changes your Voicemeeter volume, posts "I'm live" to Discord, jumps in VRChat, and much more.
+A grid of big, colored buttons that run macros, plus **mini screens** that show live information (SteamVR battery, the song playing, your stream's ad timer and viewers, a clock, dice...). Press a button and it mutes your mic, switches your OBS scene, sends a chat message on Twitch, Kick or YouTube, changes your Voicemod voice, shows your CPU and GPU temperature live, changes your Voicemeeter volume, posts "I'm live" to Discord, jumps in VRChat, and much more.
 
 It is a **native SteamVR overlay**: grab it, move it, resize it, snap it to your wrist, or leave it in the room, all from inside VR, and edit everything without taking the headset off. No VR? It works just as well as a desktop window (and you can hide that window if you only use VR).
 
 <p align="center"><img src="docs/images/deck.png" alt="The VR Macro Pad window with buttons, clock, timer, dice, coin and a SteamVR battery screen" width="90%"></p>
 
-## 🆕 What's new in 3.0.1
+## 🆕 What's new in 3.0.2
+
+<p align="center"><img src="docs/images/hardware.png" alt="Live hardware widgets: CPU temperature and GPU usage with graphs, an overview list, the hottest parts, network speed and drives" width="70%"></p>
+
+* 📊 **Libre Hardware Monitor** and 🖥️ **HWiNFO** (new): live **CPU, GPU, memory, drive and network stats** as mini screens. A stat with a small graph that turns amber and red when it gets hot (CPU / GPU temperature and usage, GPU memory, power, clock, fan, memory used, drive temperature, network speed, or any sensor you pick), an overview list, "hottest parts", network speed and drives. Buttons can also light up on **"the CPU is hot"**, **"the GPU is hot"**, **"a drive is hot"** or **"memory is nearly full"**, and a button can pop a stat up. Read-only: nothing on your PC is changed.
+* Pick whichever you like: **Libre Hardware Monitor** is free with no time limit (turn on its Remote Web Server). **HWiNFO** needs *Shared Memory Support* ticked and HWiNFO **restarted once**; the free version switches it off again after 12 hours, HWiNFO Pro does not.
+* 🧩 Plugin authors: a widget can now draw a small graph (`spark`). See the [Plugin reference](docs/PLUGIN-GUIDE.md).
+
+## What's new in 3.0.1
 
 * 🎭 **Voicemod** (new): change voice (the whole list, or only Voicemod's or your Community voices), random voice, voice changer / mute / hear-myself / background effects on and off with buttons that light up to match, and play any soundboard sound (all sounds, or one soundboard: yours are found by themselves and listed first). Needs a Voicemod client key: press **Instructions** on the Voicemod card.
 * 🗣️ **TeamSpeak 3** (new): mute your microphone or speakers and set yourself away, with buttons that follow your real TeamSpeak state. TeamSpeak 5 / 6 have no way for other apps to control them.
@@ -43,7 +51,7 @@ It is a **native SteamVR overlay**: grab it, move it, resize it, snap it to your
 
 **Everything is a plugin now.** OBS, Twitch, VRChat, Spotify, SteamVR, Voicemeeter and the rest were moved out of the app's core into plugins that you can switch on and off, and you can write your own.
 
-<p align="center"><img src="docs/images/plugins.png" alt="Every bundled plugin: Discord, Discord Notifications, Kick, Mix It Up, OBS, YouTube Music, Spotify, SteamVR, Streamer.bot, TeamSpeak 3, Twitch, Voicemeeter, Voicemod, VRChat and YouTube" width="90%"></p>
+<p align="center"><img src="docs/images/plugins.png" alt="Every bundled plugin: Discord, Discord Notifications, HWiNFO, Kick, Libre Hardware Monitor, Mix It Up, OBS, YouTube Music, Spotify, SteamVR, Streamer.bot, TeamSpeak 3, Twitch, Voicemeeter, Voicemod, VRChat and YouTube" width="90%"></p>
 
 * 🧩 **A real plugin system.** A plugin is a folder with a few small JavaScript files: no build step, no touching the app. Drop it in, restart, and it has its own settings card, actions, mini screens, sign-in and connection status. Start with the step-by-step tutorial: **[Build your own plugin](docs/BUILD-A-PLUGIN.md)**.
 * 💬 **Discord** (new): post "I'm live" messages, cards and screenshots through a webhook, share a new Steam screenshot or your last VRChat photo, and press your Discord mute / deafen / push-to-talk shortcuts.
@@ -98,6 +106,8 @@ Everything from 2.0 is still here: the native SteamVR overlay with its dashboard
 | ▶️ **YouTube** | live chat, go live / end stream, ad breaks, title / description / category, public / unlisted / private |
 | 🤖 **Streamer.bot** | run any of your Streamer.bot actions |
 | 🎛️ **Mix It Up** | run your commands, send a chat message, clear chat, turn commands on or off |
+| 📊 **Libre Hardware Monitor** | live CPU, GPU, memory, drive and network stats, and buttons that follow "the GPU is hot" |
+| 🖥️ **HWiNFO** | the same stats from HWiNFO's Shared Memory Support |
 | 🎭 **Voicemod** | change voice, random voice, voice changer / mute / hear-myself / background effects, play or stop soundboard sounds |
 | 🗣️ **TeamSpeak 3** | mute your microphone or speakers, set yourself away |
 | 💬 **Discord** | post messages, cards and screenshots, share a Steam screenshot or VRChat photo, mute / deafen / push-to-talk |
@@ -119,6 +129,7 @@ Buttons that show live information instead of just running steps:
 | 🎶 **Now playing** | album cover, title, progress, controls. Spotify and most players |
 | 📺 **Stream status** | Twitch, Kick and YouTube: live badge, viewers, uptime, and the countdown to your next ad |
 | 🔔 **Discord messages** | who last messaged you, and buttons that light up on a new one |
+| 📊 **Hardware stats** | CPU / GPU temperature and usage with a live graph, overview, hottest parts, network speed, drives. From Libre Hardware Monitor or HWiNFO |
 
 ## 🫥 Buttons only (see-through)
 
@@ -137,7 +148,7 @@ It works next to XSOverlay and OVR Toolkit and with any SteamVR headset (Quest o
 Prefer a window capture? The desktop window still works with **OVR Toolkit / XSOverlay / Desktop+**, and clicking it does **not** steal focus from your game.
 
 <details>
-<summary><b>🔌 Setting up OBS, VRChat, Twitch, Kick, YouTube, Streamer.bot, Mix It Up, Voicemod, TeamSpeak 3, Discord, Spotify Like, Pear...</b></summary>
+<summary><b>🔌 Setting up OBS, VRChat, Twitch, Kick, YouTube, Streamer.bot, Mix It Up, Voicemod, TeamSpeak 3, Libre Hardware Monitor, HWiNFO, Discord, Spotify Like, Pear...</b></summary>
 
 <br>
 
@@ -154,6 +165,8 @@ Open **Settings → Plugins** and expand the plugin. Ones that need a one-time s
 | **Mix It Up** | In Mix It Up: Services → Developer API → Connect. Then **Save and test connection** on the Mix It Up card. |
 | **Voicemod** | Voicemod's Control API needs a client key, which you ask Voicemod for (the **Instructions** button has the link). Paste it on the Voicemod card and press **Save and test connection**. A sound or soundboard you have just added only shows up after it has been played once in Voicemod (then press ⟳). |
 | **TeamSpeak 3** | In TeamSpeak 3: Tools → Options → Addons → ClientQuery → Settings, copy the API key into the TeamSpeak 3 card, connect to a server, then **Save and test connection**. |
+| **Libre Hardware Monitor** | Run Libre Hardware Monitor (as administrator, so it can read every sensor), then Options → Remote Web Server → Run. Press **Save and test connection** on its card. |
+| **HWiNFO** | In HWiNFO Settings (General / User Interface tab) tick **Shared Memory Support**, press OK, then **restart HWiNFO** (close it completely, also from the tray, and open it again) with its Sensors window running. The free version turns Shared Memory Support off after 12 hours: tick it again and restart. Then press **Save and test connection**. |
 | **Discord** | Channel settings → Integrations → Webhooks → copy the webhook URL into the Discord card. The mute / deafen / push-to-talk buttons press the shortcuts you set in Discord. |
 | **Spotify** | Play, skip, shuffle, repeat, seek and volume need **no setup and no login**. *Like* needs a one-time connection with your own Spotify developer app (see the [guide](docs/GUIDE.md#setting-up-the-integrations)). |
 | **YouTube Music** | In Pear: Plugins → API Server → enable. Then **Connect Pear**. |
@@ -174,7 +187,8 @@ Open **Settings → Plugins** and expand the plugin. Ones that need a one-time s
 
 - **Windows only.**
 - **YouTube's one-click sign-in is not available yet** (waiting on Google's app verification). Use your own Google app for now (Instructions button). Once verified, anyone will be able to log in with one click, and it will still show Google's normal permission screen.
-- **New in 3.0.1 and tried less:** Voicemod was tested against a real Voicemod. **Mix It Up** and **TeamSpeak 3** were built from their official documentation and tested against stand-ins, not yet against the real apps. Reports welcome!
+- **Hardware stats** were tested against a real Libre Hardware Monitor and a real HWiNFO. Which sensor counts as "the CPU temperature" is picked automatically (the package temperature, or the GPU that is busiest); any reading can be picked by hand instead. HWiNFO must be restarted after Shared Memory Support is ticked, and the free version stops sharing after 12 hours.
+- **Tried less in 3.0.1:** Voicemod was tested against a real Voicemod. **Mix It Up** and **TeamSpeak 3** were built from their official documentation and tested against stand-ins, not yet against the real apps. Reports welcome!
 - Voicemod only tells other apps about a sound after it has been played once in Voicemod, and never says which **voices** are on a soundboard (only which sounds), so voices have no soundboard lists.
 - The YouTube plugin has no actions that target one viewer (bans, timeouts) on purpose, and Kick has no ban / unban either: they are slow and error-prone to do from inside VR.
 - Tried on real hardware: the overlay, the dashboard entry and editor. **Not tried on real hardware yet:** the SteamVR battery screen, Voicemeeter (built against VB-Audio's official documentation and a built-in test double), headset brightness (depends on the headset's driver; "Dim the view" works everywhere), and the SteamVR keyboard in the VR editor. Reports welcome!
@@ -199,7 +213,7 @@ git clone https://github.com/Jayconius/VRMacroPad.git
 cd VRMacroPad
 npm install
 npm start          # run it
-npm test           # 370 tests
+npm test           # 388 tests
 npm run dist       # build the installer and portable exe into dist/
 ```
 

@@ -615,6 +615,10 @@ body.editor button, body.editor .tab, body.editor select, body.editor input:not(
 .w-generic[data-status='ok'] .w-big { color: #6bd28f; }
 .w-generic[data-status='warn'] .w-big { color: #f0c05a; }
 .w-generic[data-status='error'] .w-big, .w-generic[data-status='error'] .w-sub { color: #ff8a80; }
+.w-spark { display: flex; align-items: flex-end; gap: 1px; width: 86%; flex: 1 1 0; min-height: 12px; max-height: 40cqh; }
+.w-spark i { flex: 1 1 0; background: var(--fg); opacity: 0.55; border-radius: 1px 1px 0 0; }
+.w-generic[data-status='warn'] .w-spark i { background: #f0c05a; }
+.w-generic[data-status='error'] .w-spark i { background: #ff8a80; }
 .w-items { display: flex; flex-direction: column; gap: 0.6cqh; width: 86%; font-size: clamp(10px, min(8cqh, 4.4cqw), 17px); }
 .w-item { display: flex; justify-content: space-between; gap: 8px; }
 .w-item span { opacity: 0.75; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

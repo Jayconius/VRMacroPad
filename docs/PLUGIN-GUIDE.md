@@ -99,7 +99,7 @@ An array of mini-screen definitions:
 
 **How it is drawn.** A plugin widget has no browser code of its own: the app draws whatever `data()` returns using one
 generic layout. All fields are optional and unknown ones are ignored: `value` (big text), `subtitle` (or `title`),
-`progress` (0 to 1), `status` (`'ok'`, `'warn'`, `'error'`) and `items` (up to 12 `{ label, value }` rows). If `data()` throws,
+`progress` (0 to 1), `status` (`'ok'`, `'warn'`, `'error'`) `items` (up to 12 `{ label, value }` rows) and `spark` (recent numbers, oldest first, drawn as a small bar graph; scaled between their lowest and highest unless you also give `sparkMin` / `sparkMax`). If `data()` throws,
 the widget shows the error text instead of breaking the page.
 
 `ctx` here has `now()`, `random(n)`, `runtime` (the WidgetRuntime itself — `ctx.runtime.setTimer(...)` is how

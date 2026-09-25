@@ -439,8 +439,9 @@ function genericWidget(ctx) {
   const sub = h('div', { class: 'w-sub' });
   const barFill = h('i');
   const bar = h('div', { class: 'w-bar', hidden: true }, barFill);
+  const spark = h('div', { class: 'w-spark', hidden: true });
   const items = h('div', { class: 'w-items' });
-  const el = inner('w-generic', caption(ctx), value, sub, bar, items);
+  const el = inner('w-generic', caption(ctx), value, sub, bar, spark, items);
   return {
     el,
     update(d) {
@@ -459,6 +460,17 @@ function genericWidget(ctx) {
       const p = Number(d.progress);
       bar.hidden = !Number.isFinite(p) || d.progress === null || d.progress === undefined;
       if (!bar.hidden) barFill.style.width = `${Math.max(0, Math.min(1, p)) * 100}%`;
+      // spark: recent numbers, oldest first, drawn as a strip of bars scaled between the lowest and highest (or sparkMin/sparkMax).
+      const pts = Array.isArray(d.spark) ? d.spark.map(Number).filter(Number.isFinite).slice(-60) : [];
+      spark.hidden = pts.length < 2;
+      if (!spark.hidden) {
+        const lo = Number.isFinite(Number(d.sparkMin)) && d.sparkMin !== null ? Number(d.sparkMin) : Math.min(...pts);
+        const hi = Number.isFinite(Number(d.sparkMax)) && d.sparkMax !== null ? Number(d.sparkMax) : Math.max(...pts);
+        const span = hi - lo || 1;
+        while (spark.childNodes.length < pts.length) spark.append(h('i'));
+        while (spark.childNodes.length > pts.length) spark.removeChild(spark.lastChild);
+        pts.forEach((v, i) => { spark.childNodes[i].style.height = `${Math.max(4, Math.min(100, ((v - lo) / span) * 100))}%`; });
+      }
       clear(items);
       for (const it of Array.isArray(d.items) ? d.items.slice(0, 12) : []) items.append(h('div', { class: 'w-item' }, h('span', null, text(it && it.label)), h('strong', null, text(it && it.value))));
       el.dataset.status = ['ok', 'warn', 'error'].includes(d.status) ? d.status : '';
