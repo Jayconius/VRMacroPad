@@ -142,6 +142,14 @@ A plugin can also put a `note` string in its `status()`; the Settings card shows
 `advanced: true` on a settings field tucks it inside a collapsed "Advanced" section always (`advancedLabel` on the manifest
 renames the section), for things most people never need.
 
+`section: 'Some title'` on several settings fields keeps them together in one collapsed box whose title line summarises what is inside
+(its text values, and how many things are ticked in a `multiselect`; `countLabel: 'voices'` names what is counted). It is for a few
+related settings that would otherwise clutter the card, like a set of named groups. A `multiselect` setting (with `optionsFrom`) is saved
+as a list of text values, and its tick-list gets a filter box once it has more than a dozen entries.
+
+An option list can depend on other fields of the same button: give a param `optionsFilter: ['otherKey']`. The list is then asked again
+whenever that field changes, and its function gets their current values as its second argument (`(ctx, args) => ...`).
+
 An `Instructions` button: give the manifest a `guide` (an object, or a function of `status()`):
 
 ```js

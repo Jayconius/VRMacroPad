@@ -338,3 +338,20 @@ test('about: the snapshot carries the version, author and links, and only the ap
   assert.deepEqual(opened, ['https://jayconius.com/', 'https://jayconius.com/', 'https://github.com/Jayconius/VRMacroPad', 'https://github.com/Jayconius/VRMacroPad/releases/latest']);
   c.ws.close();
 });
+
+test('options: a list that depends on other fields is asked with their values (a few short strings, nothing else)', async () => {
+  const { app, port } = await boot();
+  app.registry.get('obs').optionLists['t.args'] = (ctx, args) => [{ value: JSON.stringify(args), label: 'args' }];
+  const client = await openWs(port, { token: app.token });
+  const plain = await request(client, 'options', { kind: 't.args' });
+  assert.deepEqual(JSON.parse(plain.result[0].value), {}, 'no fields: an empty object');
+  const sent = await request(client, 'options', { kind: 't.args', args: { board: 'Anime', n: 5, sneaky: { a: 1 }, list: [1], long: 'x'.repeat(500) } });
+  const got = JSON.parse(sent.result[0].value);
+  assert.equal(got.board, 'Anime');
+  assert.equal(got.n, '5');
+  assert.ok(!('sneaky' in got) && !('list' in got), 'objects and lists are dropped');
+  assert.equal(got.long.length, 200, 'long values are cut');
+  const bad = await request(client, 'options', { kind: 't.args', args: 'not an object' });
+  assert.deepEqual(JSON.parse(bad.result[0].value), {});
+  client.ws.close();
+});

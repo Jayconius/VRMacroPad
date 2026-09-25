@@ -315,7 +315,7 @@ textarea { resize: vertical; font-family: Consolas, monospace; font-size: 13px; 
 .check input { width: 18px; height: 18px; accent-color: var(--accent); }
 .checklist { display: flex; flex-direction: column; gap: 6px; max-height: 160px; overflow-y: auto; padding: 8px; background: var(--panel-2); border-radius: 9px; border: 1px solid var(--line); }
 .options-field { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
-.options-field > input, .options-field > select { flex: 1; min-width: 0; }
+.options-field > input, .options-field > select, .options-field > .combo { flex: 1; min-width: 0; }
 .options-field .field-error { flex-basis: 100%; }
 .param-form { display: flex; flex-direction: column; gap: 12px; }
 
@@ -624,3 +624,21 @@ body.editor button, body.editor .tab, body.editor select, body.editor input:not(
 .update-bar { height: 10px; border-radius: 6px; background: var(--panel-2); border: 1px solid var(--line); overflow: hidden; }
 .update-bar-fill { height: 100%; background: var(--accent); transition: width 0.25s linear; }
 .update-path { display: block; word-break: break-all; font-size: 12px; padding: 8px 10px; background: var(--panel-2); border: 1px solid var(--line); border-radius: 8px; }
+
+/* a text box with a drop-down list drawn by the page (see comboBox in forms.js) */
+.combo { position: relative; display: flex; min-width: 0; }
+.combo > input { width: 100%; padding-right: 34px; }
+.combo-arrow { position: absolute; right: 4px; top: 50%; transform: translateY(-50%); background: none; border: 0; color: var(--muted); cursor: pointer; padding: 6px 10px; font-size: 14px; }
+.combo-list { position: fixed; z-index: 1000; overflow-y: auto; overscroll-behavior: contain; background: var(--panel-2); border: 1px solid var(--line); border-radius: 10px; box-shadow: 0 12px 32px rgba(0, 0, 0, 0.45); padding: 4px; }
+.combo-item { display: flex; justify-content: space-between; align-items: baseline; gap: 14px; padding: 7px 10px; border-radius: 7px; cursor: pointer; }
+.combo-value { font-weight: 600; min-width: 0; overflow-wrap: anywhere; }
+.combo-hint { flex: none; color: var(--muted); font-size: 12px; white-space: nowrap; }
+.combo-item.active { background: color-mix(in srgb, var(--accent) 22%, transparent); }
+.combo-item.on .combo-value { color: var(--accent); }
+.combo-empty { padding: 10px; color: var(--muted); font-size: 13px; }
+
+.multi-field { display: flex; flex-direction: column; gap: 6px; }
+.multi-field .checklist { max-height: 260px; }
+.multi-filter { width: 100%; }
+.settings-section > summary { font-weight: 600; }
+.settings-section[open] { padding-bottom: 8px; }

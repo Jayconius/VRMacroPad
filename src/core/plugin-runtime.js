@@ -195,9 +195,10 @@ class PluginRuntime extends EventEmitter {
   }
 
   // ---- for the editor's dropdowns: each plugin registers the kinds of lists it can answer ----
-  async options(kind) {
+  // args: the current values of the fields this list depends on (a param's optionsFilter), e.g. { board: 'Anime' }.
+  async options(kind, args = {}) {
     for (const manifest of this.registry.list()) {
-      if (manifest.optionLists && manifest.optionLists[kind]) return manifest.optionLists[kind](this.ctxFor(manifest.id));
+      if (manifest.optionLists && manifest.optionLists[kind]) return manifest.optionLists[kind](this.ctxFor(manifest.id), args);
     }
     throw new Error(`Unknown option list "${kind}"`);
   }

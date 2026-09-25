@@ -174,7 +174,12 @@ function createServer({ engine, providers, helper, store, images, hooks, token, 
       return images.add(Buffer.from(msg.data, 'base64'));
     },
     async options(msg) {
-      return providers.options(String(msg.kind));
+      // Values of the fields a list depends on: a few short strings, nothing else gets through.
+      const args = {};
+      if (msg.args && typeof msg.args === 'object' && !Array.isArray(msg.args)) {
+        for (const [k, v] of Object.entries(msg.args).slice(0, 8)) if (typeof v === 'string' || typeof v === 'number') args[String(k).slice(0, 40)] = String(v).slice(0, 200);
+      }
+      return providers.options(String(msg.kind), args);
     },
     async test(msg) {
       requireEditing();

@@ -74,28 +74,119 @@ export function hotkeyField({ value, onChange, format = 'macro', placeholder = '
   return h('div', { class: 'row gap' }, input, rec);
 }
 
+// A box you can type in that also drops down a list of choices. The list is drawn by the page itself (a browser's own
+// <datalist> pop-up cannot be scrolled in every window, only shows what matches what is typed, and is not part of the page, so
+// it cannot be seen in a VR overlay). Opening it always shows EVERYTHING and scrolls to the current choice; typing narrows it.
+// items: [{ value, label, hint }]; a choice puts its value in the box. Free typing is still allowed.
+export function comboBox({ value = '', placeholder = '', onChange }) {
+  let items = [];
+  let typed = false; // true once you type: only then does the list narrow
+  let active = -1;
+  const input = h('input', { type: 'text', value, placeholder, spellcheck: 'false', autocomplete: 'off', role: 'combobox', 'aria-expanded': 'false' });
+  const arrow = h('button', { type: 'button', class: 'combo-arrow', tabindex: '-1', 'aria-label': 'Show the list' }, '▾');
+  const list = h('div', { class: 'combo-list', role: 'listbox', hidden: true });
+  const root = h('div', { class: 'combo' }, input, arrow, list);
+  const isOpen = () => !list.hidden;
+
+  const shown = () => {
+    // every word you type has to appear somewhere in the name or its note, in any order ("demon radio" finds "Radio Demon")
+    const words = typed ? input.value.trim().toLowerCase().split(/\s+/).filter(Boolean) : [];
+    return words.length ? items.filter((o) => { const hay = `${o.value} ${o.hint || ''}`.toLowerCase(); return words.every((w) => hay.includes(w)); }) : items;
+  };
+  function place() {
+    const r = input.getBoundingClientRect();
+    const below = window.innerHeight - r.bottom - 12;
+    const above = r.top - 12;
+    const up = below < 200 && above > below;
+    Object.assign(list.style, { left: `${r.left}px`, width: `${r.width}px`, maxHeight: `${Math.max(120, Math.min(340, up ? above : below))}px`, top: up ? 'auto' : `${r.bottom + 2}px`, bottom: up ? `${window.innerHeight - r.top + 2}px` : 'auto' });
+  }
+  function draw({ scrollToCurrent = false } = {}) {
+    clear(list);
+    const rows = shown();
+    if (!rows.length) list.append(h('div', { class: 'combo-empty' }, items.length ? 'Nothing matches. What you typed is used as it is.' : 'The list is empty (or still loading).'));
+    rows.forEach((o, i) => {
+      const el = h('div', { class: `combo-item${o.value === input.value ? ' on' : ''}${i === active ? ' active' : ''}`, role: 'option', 'data-i': String(i) },
+        h('span', { class: 'combo-value' }, o.value), o.hint ? h('span', { class: 'combo-hint' }, o.hint) : null);
+      list.append(el);
+    });
+    if (scrollToCurrent) { const cur = list.querySelector('.combo-item.on'); if (cur) cur.scrollIntoView({ block: 'center' }); }
+  }
+  function openList() {
+    typed = typed && isOpen();
+    active = -1;
+    list.hidden = false;
+    input.setAttribute('aria-expanded', 'true');
+    place();
+    draw({ scrollToCurrent: !typed });
+  }
+  function closeList() {
+    list.hidden = true;
+    typed = false;
+    active = -1;
+    input.setAttribute('aria-expanded', 'false');
+  }
+  function choose(i) {
+    const o = shown()[i];
+    if (!o) return;
+    input.value = o.value;
+    closeList();
+    onChange(o.value);
+  }
+  const move = (d) => {
+    const n = shown().length;
+    if (!n) return;
+    active = (active + d + n) % n;
+    draw();
+    const el = list.querySelector('.combo-item.active');
+    if (el) el.scrollIntoView({ block: 'nearest' });
+  };
+
+  input.addEventListener('focus', () => { typed = false; openList(); });
+  input.addEventListener('input', () => { typed = true; active = -1; onChange(input.value); if (!isOpen()) openList(); else { place(); draw(); } });
+  input.addEventListener('blur', closeList);
+  input.addEventListener('click', () => { if (!isOpen()) { typed = false; openList(); } }); // the box may already have focus (after a choice)
+  input.addEventListener('keydown', (e) => {
+    if (e.key === 'ArrowDown') { e.preventDefault(); if (!isOpen()) openList(); else move(1); }
+    else if (e.key === 'ArrowUp') { e.preventDefault(); if (isOpen()) move(-1); }
+    else if (e.key === 'Enter' && isOpen() && active >= 0) { e.preventDefault(); choose(active); }
+    else if (e.key === 'Escape' && isOpen()) { e.preventDefault(); e.stopPropagation(); closeList(); }
+  });
+  // pointerdown (not click) and preventDefault: the box keeps focus, so the list does not close before the choice lands
+  list.addEventListener('pointerdown', (e) => { e.preventDefault(); const el = e.target.closest('.combo-item'); if (el) choose(Number(el.dataset.i)); });
+  list.addEventListener('pointermove', (e) => { const el = e.target.closest('.combo-item'); const i = el ? Number(el.dataset.i) : -1; if (i !== active && i >= 0) { active = i; for (const x of list.children) x.classList.toggle('active', x === el); } });
+  arrow.addEventListener('pointerdown', (e) => { e.preventDefault(); if (isOpen()) closeList(); else { input.focus(); openList(); } });
+  const reposition = () => { if (isOpen()) place(); };
+  window.addEventListener('resize', reposition);
+  document.addEventListener('scroll', reposition, true); // the dialog body scrolls under it
+
+  root.input = input;
+  root.setItems = (next) => { items = next || []; if (isOpen()) draw(); };
+  return root;
+}
+
 // ---- option lists (devices, scenes, apps) loaded on demand ----
 const optionCache = new Map();
 
-export function loadOptions(kind, { force = false } = {}) {
-  const hit = optionCache.get(kind);
+export function loadOptions(kind, { force = false, args } = {}) {
+  const cacheKey = args && Object.keys(args).length ? `${kind}\u0000${JSON.stringify(args)}` : kind;
+  const hit = optionCache.get(cacheKey);
   if (hit && !force && Date.now() - hit.at < 5000) return Promise.resolve(hit.list);
-  return net.request('options', { kind }).then((list) => {
-    optionCache.set(kind, { at: Date.now(), list });
+  return net.request('options', args && Object.keys(args).length ? { kind, args } : { kind }).then((list) => {
+    optionCache.set(cacheKey, { at: Date.now(), list });
     return list;
   });
 }
 
 // A <select> (or free-text input when allowCustom) whose entries arrive asynchronously.
-export function optionsField({ kind, value, onChange, allowCustom = false, emptyLabel = '', placeholder = '', unknownSuffix = 'not found' }) {
+// args: an optional function giving the values of other fields this list depends on; host.reload() asks again.
+export function optionsField({ kind, value, onChange, allowCustom = false, emptyLabel = '', placeholder = '', unknownSuffix = 'not found', args = null }) {
   const host = h('div', { class: 'options-field' });
   const render = (list, error) => {
     clear(host);
     if (allowCustom) {
-      const id = `dl_${Math.random().toString(36).slice(2, 8)}`;
-      const input = h('input', { type: 'text', value: value || '', list: id, placeholder: placeholder || 'Type or pick…', spellcheck: 'false' });
-      input.addEventListener('input', () => onChange(input.value));
-      host.append(input, h('datalist', { id }, (list || []).map((o) => h('option', { value: o.value }, o.hint !== undefined ? o.hint : o.label))));
+      const combo = comboBox({ value: value || '', placeholder: placeholder || 'Type or pick…', onChange });
+      combo.setItems((list || []).map((o) => ({ value: o.value, hint: o.hint !== undefined ? o.hint : (o.label !== o.value ? o.label : '') })));
+      host.append(combo);
     } else {
       const select = h('select', null,
         emptyLabel || !value ? h('option', { value: '' }, emptyLabel || 'Choose…') : null,
@@ -112,29 +203,49 @@ export function optionsField({ kind, value, onChange, allowCustom = false, empty
   const start = (force = false) => {
     clear(host);
     host.append(h('span', { class: 'muted' }, 'Loading…'));
-    loadOptions(kind, { force }).then((list) => render(list, ''), (err) => render([], err.message));
+    loadOptions(kind, { force, args: args ? args() : undefined }).then((list) => render(list, ''), (err) => render([], err.message));
   };
   start();
+  host.reload = () => start(true);
   return host;
 }
 
+// A tick-list of choices loaded on demand. With a long list (dozens of voices) a filter box appears: every word you type has to
+// appear in an entry's name or note, in any order. Ticked entries stay ticked while they are filtered out of sight.
 export function multiOptionsField({ kind, value, onChange }) {
-  const host = h('div', { class: 'checklist' });
   const selected = new Set(Array.isArray(value) ? value : []);
+  const host = h('div', { class: 'checklist' });
+  const filter = h('input', { type: 'text', class: 'multi-filter', placeholder: 'Type to filter the list…', spellcheck: 'false', autocomplete: 'off', hidden: true });
+  const count = h('span', { class: 'muted small' });
+  const root = h('div', { class: 'multi-field' }, filter, host, count);
+  let rows = [];
+  const paintCount = () => { count.textContent = selected.size ? `${selected.size} selected` : ''; };
+  const applyFilter = () => {
+    const words = filter.value.trim().toLowerCase().split(/\s+/).filter(Boolean);
+    for (const r of rows) r.el.hidden = !words.every((w) => r.text.includes(w));
+  };
+  filter.addEventListener('input', applyFilter);
   loadOptions(kind).then((list) => {
     clear(host);
+    rows = [];
     for (const o of list) {
       const cb = h('input', { type: 'checkbox', checked: selected.has(o.value) });
       cb.addEventListener('change', () => {
         if (cb.checked) selected.add(o.value); else selected.delete(o.value);
         onChange([...selected]);
+        paintCount();
       });
-      host.append(h('label', { class: 'check' }, cb, o.label));
+      const el = h('label', { class: 'check' }, cb, o.label, o.hint ? h('span', { class: 'muted small' }, ` ${o.hint}`) : null);
+      rows.push({ el, text: `${o.label} ${o.hint || ''}`.toLowerCase() });
+      host.append(el);
     }
     if (!list.length) host.append(h('span', { class: 'muted' }, 'Nothing found'));
+    filter.hidden = list.length < 12;
+    paintCount();
   }, (err) => { clear(host); host.append(h('div', { class: 'field-error' }, err.message)); });
   host.append(h('span', { class: 'muted' }, 'Loading…'));
-  return host;
+  paintCount();
+  return root;
 }
 
 // A checklist whose entries are known up front (no loading).
@@ -152,10 +263,9 @@ export function staticMultiField({ options, value, onChange }) {
 
 // Text input with a drop-down of suggestions, but free typing still allowed.
 export function suggestInput(value, suggestions, onChange, placeholder = '') {
-  const id = `dl_${Math.random().toString(36).slice(2, 8)}`;
-  const input = h('input', { type: 'text', value: value ?? '', list: id, placeholder, spellcheck: 'false', autocomplete: 'off' });
-  input.addEventListener('input', () => onChange(input.value));
-  return h('div', { class: 'options-field' }, input, h('datalist', { id }, suggestions.map((s) => h('option', { value: s }))));
+  const combo = comboBox({ value: value ?? '', placeholder, onChange });
+  combo.setItems(suggestions.map((v) => ({ value: v })));
+  return h('div', { class: 'options-field' }, combo);
 }
 
 // ---- generic labelled field ----
@@ -194,6 +304,7 @@ export function buildParamForm(def, params, onChange) {
     params[key] = value;
     onChange();
     updateVisibility();
+    for (const r of rows) if (r.control && r.control.reload && (r.p.optionsFilter || []).includes(key)) r.control.reload(); // a list that depends on this field
   };
   const visible = (p) => !p.showIf || p.showIf.in.includes(params[p.showIf.key]);
   function updateVisibility() {
@@ -210,7 +321,7 @@ export function buildParamForm(def, params, onChange) {
     if (params[p.key] === undefined && p.default !== undefined) params[p.key] = p.default;
     let control;
     if (p.type === 'select' && p.optionsFrom) {
-      control = optionsField({ kind: p.optionsFrom, value: params[p.key], onChange: (v) => set(p.key, v), allowCustom: p.allowCustom, emptyLabel: p.emptyLabel, unknownSuffix: p.unknownSuffix });
+      control = optionsField({ kind: p.optionsFrom, value: params[p.key], onChange: (v) => set(p.key, v), allowCustom: p.allowCustom, emptyLabel: p.emptyLabel, unknownSuffix: p.unknownSuffix, args: p.optionsFilter ? () => Object.fromEntries(p.optionsFilter.map((k) => [k, params[k] ?? ''])) : null });
     } else if (p.type === 'select') {
       control = selectInput(p.options, params[p.key] ?? p.options[0][0], (v) => set(p.key, v));
       if (params[p.key] === undefined) params[p.key] = p.options[0][0];
@@ -237,7 +348,7 @@ export function buildParamForm(def, params, onChange) {
     const el = p.type === 'boolean'
       ? h('div', { class: 'field' }, control, p.help ? h('span', { class: 'field-help' }, p.help) : null)
       : field(p.label, control, { help: p.help, required: p.required });
-    rows.push({ p, el });
+    rows.push({ p, el, control });
     root.append(el);
   }
   updateVisibility();

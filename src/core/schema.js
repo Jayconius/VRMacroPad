@@ -52,13 +52,14 @@ function normalizeSettingField(field, raw, fallback) {
   if (field.type === 'number') return num(raw, field.min ?? -1e9, field.max ?? 1e9, fallback);
   if (field.type === 'boolean') return bool(raw, fallback);
   if (field.type === 'select' && field.options) return oneOf(raw, field.options.map((o) => o[0]), fallback);
+  if (field.type === 'multiselect') return Array.isArray(raw) ? [...new Set(raw.filter((x) => typeof x === 'string').map((x) => x.slice(0, 200)))].slice(0, 1000) : [];
   if (field.type === 'text') return str(raw, 4000, fallback ?? '').trim();
   return str(raw, 4000, fallback ?? '');
 }
 
 function pluginSettingDefault(field) {
   if (field.default !== undefined) return field.default;
-  return field.type === 'boolean' ? false : field.type === 'number' ? 0 : '';
+  return field.type === 'boolean' ? false : field.type === 'number' ? 0 : field.type === 'multiselect' ? [] : '';
 }
 
 // One plugin's settings.plugins.<id> block: its own declared fields, plus (for the built-ins) the field

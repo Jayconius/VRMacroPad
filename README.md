@@ -26,17 +26,24 @@ Use it on your desktop, or float it in VR as a real **SteamVR overlay**.
 
 ## ✨ What is it?
 
-A grid of big, colored buttons that run macros, plus **mini screens** that show live information (SteamVR battery, the song playing, your stream's ad timer and viewers, a clock, dice...). Press a button and it mutes your mic, switches your OBS scene, sends a chat message on Twitch, Kick or YouTube, changes your Voicemeeter volume, posts "I'm live" to Discord, jumps in VRChat, and much more.
+A grid of big, colored buttons that run macros, plus **mini screens** that show live information (SteamVR battery, the song playing, your stream's ad timer and viewers, a clock, dice...). Press a button and it mutes your mic, switches your OBS scene, sends a chat message on Twitch, Kick or YouTube, changes your Voicemod voice, changes your Voicemeeter volume, posts "I'm live" to Discord, jumps in VRChat, and much more.
 
 It is a **native SteamVR overlay**: grab it, move it, resize it, snap it to your wrist, or leave it in the room, all from inside VR, and edit everything without taking the headset off. No VR? It works just as well as a desktop window (and you can hide that window if you only use VR).
 
 <p align="center"><img src="docs/images/deck.png" alt="The VR Macro Pad window with buttons, clock, timer, dice, coin and a SteamVR battery screen" width="90%"></p>
 
+## 🆕 What's new in 3.0.1
+
+* 🎭 **Voicemod** (new): change voice (the whole list, or only Voicemod's or your Community voices), random voice, voice changer / mute / hear-myself / background effects on and off with buttons that light up to match, and play any soundboard sound (all sounds, or one soundboard: yours are found by themselves and listed first). Needs a Voicemod client key: press **Instructions** on the Voicemod card.
+* 🗣️ **TeamSpeak 3** (new): mute your microphone or speakers and set yourself away, with buttons that follow your real TeamSpeak state. TeamSpeak 5 / 6 have no way for other apps to control them.
+* 🎛️ **Mix It Up** (new): run your Mix It Up commands, send a chat message, clear chat, and turn commands on or off, through its Developer API.
+* 🔎 **Better pick lists everywhere**: long lists (voices, sounds, scenes, actions) scroll, open showing everything, and narrow as you type, with several words in any order ("demon radio" finds "Radio Demon").
+
 ## 🆕 What's new in 3.0
 
 **Everything is a plugin now.** OBS, Twitch, VRChat, Spotify, SteamVR, Voicemeeter and the rest were moved out of the app's core into plugins that you can switch on and off, and you can write your own.
 
-<p align="center"><img src="docs/images/plugins.png" alt="Every bundled plugin: Discord, Discord Notifications, Kick, OBS, YouTube Music, Spotify, SteamVR, Streamer.bot, Twitch, Voicemeeter, VRChat and YouTube" width="90%"></p>
+<p align="center"><img src="docs/images/plugins.png" alt="Every bundled plugin: Discord, Discord Notifications, Kick, Mix It Up, OBS, YouTube Music, Spotify, SteamVR, Streamer.bot, TeamSpeak 3, Twitch, Voicemeeter, Voicemod, VRChat and YouTube" width="90%"></p>
 
 * 🧩 **A real plugin system.** A plugin is a folder with a few small JavaScript files: no build step, no touching the app. Drop it in, restart, and it has its own settings card, actions, mini screens, sign-in and connection status. Start with the step-by-step tutorial: **[Build your own plugin](docs/BUILD-A-PLUGIN.md)**.
 * 💬 **Discord** (new): post "I'm live" messages, cards and screenshots through a webhook, share a new Steam screenshot or your last VRChat photo, and press your Discord mute / deafen / push-to-talk shortcuts.
@@ -90,6 +97,9 @@ Everything from 2.0 is still here: the native SteamVR overlay with its dashboard
 | 🟢 **Kick** | chat, title and category, ad breaks, timeouts |
 | ▶️ **YouTube** | live chat, go live / end stream, ad breaks, title / description / category, public / unlisted / private |
 | 🤖 **Streamer.bot** | run any of your Streamer.bot actions |
+| 🎛️ **Mix It Up** | run your commands, send a chat message, clear chat, turn commands on or off |
+| 🎭 **Voicemod** | change voice, random voice, voice changer / mute / hear-myself / background effects, play or stop soundboard sounds |
+| 🗣️ **TeamSpeak 3** | mute your microphone or speakers, set yourself away |
 | 💬 **Discord** | post messages, cards and screenshots, share a Steam screenshot or VRChat photo, mute / deafen / push-to-talk |
 | 🎵 **Spotify** | play / skip, shuffle, repeat, seek, volume, and Like |
 | ▶️ **YouTube Music** | through [Pear Desktop](https://github.com/pear-devs/pear-desktop): like, shuffle, repeat, volume |
@@ -127,7 +137,7 @@ It works next to XSOverlay and OVR Toolkit and with any SteamVR headset (Quest o
 Prefer a window capture? The desktop window still works with **OVR Toolkit / XSOverlay / Desktop+**, and clicking it does **not** steal focus from your game.
 
 <details>
-<summary><b>🔌 Setting up OBS, VRChat, Twitch, Kick, YouTube, Streamer.bot, Discord, Spotify Like, Pear...</b></summary>
+<summary><b>🔌 Setting up OBS, VRChat, Twitch, Kick, YouTube, Streamer.bot, Mix It Up, Voicemod, TeamSpeak 3, Discord, Spotify Like, Pear...</b></summary>
 
 <br>
 
@@ -141,6 +151,9 @@ Open **Settings → Plugins** and expand the plugin. Ones that need a one-time s
 | **Kick** | **Connect Kick**, then log in and approve on kick.com. Nothing else to set up. |
 | **YouTube** | Not one-click yet (Google's verification is pending). Press **Instructions** on the YouTube card, make your own free Google app, paste its Client ID and Secret, then **Connect YouTube**. |
 | **Streamer.bot** | In Streamer.bot: Servers/Clients → WebSocket Server → start it (the defaults are fine). Then the plugin lists your actions. Only fill in a password if you turned on *Authentication*. |
+| **Mix It Up** | In Mix It Up: Services → Developer API → Connect. Then **Save and test connection** on the Mix It Up card. |
+| **Voicemod** | Voicemod's Control API needs a client key, which you ask Voicemod for (the **Instructions** button has the link). Paste it on the Voicemod card and press **Save and test connection**. A sound or soundboard you have just added only shows up after it has been played once in Voicemod (then press ⟳). |
+| **TeamSpeak 3** | In TeamSpeak 3: Tools → Options → Addons → ClientQuery → Settings, copy the API key into the TeamSpeak 3 card, connect to a server, then **Save and test connection**. |
 | **Discord** | Channel settings → Integrations → Webhooks → copy the webhook URL into the Discord card. The mute / deafen / push-to-talk buttons press the shortcuts you set in Discord. |
 | **Spotify** | Play, skip, shuffle, repeat, seek and volume need **no setup and no login**. *Like* needs a one-time connection with your own Spotify developer app (see the [guide](docs/GUIDE.md#setting-up-the-integrations)). |
 | **YouTube Music** | In Pear: Plugins → API Server → enable. Then **Connect Pear**. |
@@ -161,6 +174,8 @@ Open **Settings → Plugins** and expand the plugin. Ones that need a one-time s
 
 - **Windows only.**
 - **YouTube's one-click sign-in is not available yet** (waiting on Google's app verification). Use your own Google app for now (Instructions button). Once verified, anyone will be able to log in with one click, and it will still show Google's normal permission screen.
+- **New in 3.0.1 and tried less:** Voicemod was tested against a real Voicemod. **Mix It Up** and **TeamSpeak 3** were built from their official documentation and tested against stand-ins, not yet against the real apps. Reports welcome!
+- Voicemod only tells other apps about a sound after it has been played once in Voicemod, and never says which **voices** are on a soundboard (only which sounds), so voices have no soundboard lists.
 - The YouTube plugin has no actions that target one viewer (bans, timeouts) on purpose, and Kick has no ban / unban either: they are slow and error-prone to do from inside VR.
 - Tried on real hardware: the overlay, the dashboard entry and editor. **Not tried on real hardware yet:** the SteamVR battery screen, Voicemeeter (built against VB-Audio's official documentation and a built-in test double), headset brightness (depends on the headset's driver; "Dim the view" works everywhere), and the SteamVR keyboard in the VR editor. Reports welcome!
 - Spotify **Like** talks to Spotify's Web API, which (since Feb 2026) only lets a development-mode app work while its owner has Premium, for up to 5 people. So each person uses their own Client ID.
@@ -184,7 +199,7 @@ git clone https://github.com/Jayconius/VRMacroPad.git
 cd VRMacroPad
 npm install
 npm start          # run it
-npm test           # 336 tests
+npm test           # 370 tests
 npm run dist       # build the installer and portable exe into dist/
 ```
 

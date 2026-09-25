@@ -19,6 +19,7 @@ tools/
 secrets.json
 plugins/kick/kick-app.json
 plugins/youtube/youtube-app.json
+plugins/voicemod/voicemod-app.json
 # the private sign-in helpers (Cloudflare Workers) and their set-up guides: they stay on the developer PC
 plugins/*/broker/
 auth.json

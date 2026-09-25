@@ -294,6 +294,26 @@ export function openSettings() {
     } }, 'Save and test connection'), result);
   }
 
+  // A collapsed box for a few related settings. Its title line shows the section's name, plus its text values and how many
+  // things are ticked ("Voice soundboard 1: Test · 2 voices"), and keeps up to date as you type.
+  function settingsSection(bag, title) {
+    const fields = [];
+    const summary = h('summary', null, title);
+    const body = h('div', { class: 'stack' });
+    const el = h('details', { class: 'advanced settings-section' }, summary, body);
+    const paint = () => {
+      const bits = [];
+      for (const f of fields) {
+        if (f.type === 'text' && bag[f.key]) bits.push(String(bag[f.key]));
+        else if (f.type === 'multiselect' && Array.isArray(bag[f.key]) && bag[f.key].length) bits.push(`${bag[f.key].length} ${bag[f.key].length === 1 ? (f.countLabel || 'selected').replace(/s$/, '') : (f.countLabel || 'selected')}`); // "1 voice", "2 voices"
+      }
+      summary.textContent = bits.length ? `${title}: ${bits.join(' · ')}` : title;
+    };
+    el.addEventListener('input', paint);
+    el.addEventListener('change', paint);
+    return { el, add(f, control) { fields.push(f); body.append(control); paint(); } };
+  }
+
   function pluginCard(m) {
     const bag = draft.plugins[m.id];
     const st0 = pluginStatus(m.id);
@@ -305,7 +325,17 @@ export function openSettings() {
     // A field is tucked under "Advanced" when the plugin says so (advanced: true), or when it only matters if you are
     // replacing the plugin's built-in app (builtInAware, while the plugin reports hasBuiltIn).
     const builtInMode = Boolean(st0.hasBuiltIn) && (m.settingsFields || []).some((f) => f.builtInAware);
-    for (const f of m.settingsFields || []) (f.advanced || (f.builtInAware && st0.hasBuiltIn) ? advancedFields : normalFields).push(settingField(m, f, st0));
+    // Fields that share a "section" title live together in one collapsed box whose title line summarises what is inside.
+    const sections = new Map();
+    for (const f of m.settingsFields || []) {
+      const advanced = Boolean(f.advanced || (f.builtInAware && st0.hasBuiltIn));
+      const target = advanced ? advancedFields : normalFields;
+      const control = settingField(m, f, st0);
+      if (!f.section) { target.push(control); continue; }
+      const key = `${advanced ? 'a' : 'n'}|${f.section}`;
+      if (!sections.has(key)) { const box = settingsSection(bag, f.section); sections.set(key, box); target.push(box.el); }
+      sections.get(key).add(f, control);
+    }
     const summaryDot = h('span', { class: 'dot' });
     // Only the tail (Connect/Disconnect, status row) needs to live-update as the server pushes status
     // changes — everything else above it is built once, so the accordion's own open/closed state never

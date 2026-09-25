@@ -150,6 +150,16 @@ Every integration is a plugin: open **Settings → Plugins** and expand its card
 * **Discord**: create a webhook (channel settings → Integrations → Webhooks) and paste its URL into the Discord card. Then buttons can post
   messages, cards and screenshots, share a new Steam screenshot or your last VRChat photo, and press your Discord mute / deafen / push-to-talk shortcuts.
   **Discord Notifications** adds mini screens showing who last messaged you (with filters) and buttons that light up on a new message.
+* **Voicemod**: Voicemod's Control API needs a client key that you ask Voicemod for (the card's **Instructions** button has the link). Paste
+  it, press **Save and test connection**, then use Change voice, Random voice, the on / off switches (voice changer, mute, hear-myself,
+  background) and Play a sound. Each voice or sound button has one **List** dropdown that starts on the complete list (voices: all /
+  Voicemod's / Community; sounds: all, then your soundboards, then Voicemod's), and a picker you can scroll or type in. Voicemod only reports
+  a new sound (or soundboard) after it has been played once in Voicemod; press ⟳ afterwards.
+* **TeamSpeak 3**: Tools → Options → Addons → ClientQuery → Settings, copy the API key into the TeamSpeak 3 card, connect to a server, and
+  press **Save and test connection**. Buttons mute your microphone or speakers or set you away, and light up to follow TeamSpeak.
+  TeamSpeak 5 / 6 cannot be controlled by other apps.
+* **Mix It Up**: Services → Developer API → Connect, then **Save and test connection** on the Mix It Up card. Buttons run a command (picked
+  from your list), send a chat message, clear chat, or turn a command on or off.
 * **Updates**: Settings → General → *Check for updates* (off by default). When on, the app asks GitHub for the latest release number, and a box offers
   a link, **Download** and **Skip**. Portable copies save the new exe next to the old one; installed copies can install it and restart.
 
@@ -185,7 +195,7 @@ Home Assistant passwords are stored in plain text in your config; layout export 
 ## For developers
 
 ```
-npm test              # 336 tests: logic, protocols against fake OBS / VRChat / Twitch / Pear / Voicemeeter, server security, real Windows helpers
+npm test              # 370 tests: logic, protocols against fake OBS / VRChat / Twitch / Pear / Voicemeeter, server security, real Windows helpers
 npm run test:overlay  # renders the overlay page off-screen and drives it with fake laser events (~100 checks)
 npm run dist            # builds the installer and the portable exe into dist/ (needs internet the first time)
 npm run test:clean    # launches the real app to check the buttons-only view is really see-through
